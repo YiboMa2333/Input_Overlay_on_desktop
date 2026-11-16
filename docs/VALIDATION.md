@@ -1,5 +1,55 @@
 # Validation record
 
+## Customization and packaging verification, 2026-11-16
+
+The latest Windows x64 Release build succeeded using LLVM-MinGW / CMake. The
+final run passed **five CTest targets**, 0 failures, in 13.49 seconds. Generated
+results: `build/customization-tests.xml` (not a source/release artifact).
+
+The state and placement suites remain green. Expanded settings tests cover
+appearance/layout/behavior persistence, malformed and bounded values, presets,
+nonempty layout recovery, a mouse-free 50%-scale single row, and startup helper
+registration/removal under an isolated test registry key. The actual logon Run
+key was not changed, and startup at logon has not been tested.
+
+The native desktop suite exercised the modeless settings window at DPI 144,
+actual RGB picker selection, font picker opening/cancel, font-family/size text
+editing, real tab-control navigation, Apply and restart, custom key positions
+and visibility, layout reset, repeated Apply after geometry reset, topmost off
+with locked click-through retained, launch hidden to tray and Edit reveal. A
+native screenshot was inspected and retained in `docs/screenshots/settings.png`.
+
+The color chooser requires its real edit-character notifications; early test
+attempts using cross-process caption setters did not exercise that logic. The
+corrected driver selected RGB 17/34/51 and verified persisted `#112233`. Tab
+navigation likewise uses the native control rather than cross-process WM_NOTIFY
+pointers. These were test-driver corrections, not claims that unexecuted UI
+paths worked. Choosing a font through the font picker's OK path and independently
+selecting a border color remain manual UI checks; family/size edits and color
+storage were tested. Physical pressed-state theme combinations are not all
+covered by screenshot assertions.
+
+The new `packaging_policy` target passed checks for source/toolchain-bound review,
+release refusal, malformed binary rejection and actual x64 system DLL imports.
+Private review staging was created with the executable, notices, manifest and
+matching source ZIP. A real `package.py release` attempt was refused while the
+review record is pending. No distributable release ZIP was created or uploaded.
+
+The packaging policy was extended with a source-attribution inventory test
+(six Python checks passed), and staging contents were checked for LICENSE,
+NOTICE, retained MIT/GPL attribution, exact source and build scripts. A final
+noninteractive CTest run passed all four applicable targets. The isolated HKCU
+write test was denied in the restricted agent sandbox and passed in the normal
+user execution context; this does not require modifying the real Run key or
+granting the application administrator rights.
+
+The workflow is implemented but has not run on GitHub. The local verified route
+is LLVM-MinGW; MSVC/static-CRT packaging still needs its CI execution and runtime
+licence review. Actual hardware coverage remains one 2240x1400 monitor at 150%
+scaling; physical multi-monitor checks stay deferred by the user's decision.
+Startup at logon, a graphics device reset and broad CPU/private-memory benchmarks
+were not performed. See `CUSTOMIZATION.md` and `RELEASE_REVIEW.md`.
+
 ## Executed on Windows, 2026-11-16
 
 Environment: Windows build 26200 (x64), portable LLVM-MinGW 20261104 / Clang

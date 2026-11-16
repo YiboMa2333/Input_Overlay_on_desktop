@@ -2,6 +2,7 @@
 #pragma once
 #include <array>
 #include "input/input_state.hpp"
+#include "settings/settings.hpp"
 namespace overlay::hud {
 inline constexpr float width = 338, height = 148;
 struct KeyShape {
@@ -16,6 +17,17 @@ inline constexpr std::array<KeyShape, 9> keys{{
     {L"A", 70, 54, 40, 40, A, A}, {L"S", 116, 54, 40, 40, S, S}, {L"D", 162, 54, 40, 40, D, D},
     {L"Ctrl", 8, 100, 56, 40, LeftCtrl, RightCtrl}, {L"Space", 70, 100, 132, 40, Space, Space}
 }};
+struct Extent { float width,height,mouse_x; };
+inline Extent extent(const Settings& settings) {
+    float right=8,bottom=8;
+    for(unsigned i=0;i<keys.size();++i) if(settings.keys[i].enabled) {
+        const float x=settings.keys[i].x+keys[i].width,y=settings.keys[i].y+keys[i].height;
+        if(x>right) right=x;if(y>bottom) bottom=y;
+    }
+    const float mouse_x=right+settings.spacing;
+    if(settings.show_mouse) { right=mouse_x+88;if(bottom<140) bottom=140; }
+    return {right+16,bottom+8,mouse_x};
+}
 struct Fit { float scale, x, y; };
 inline Fit fit(float pixel_width, float pixel_height) {
     const float a = pixel_width / width, b = pixel_height / height;

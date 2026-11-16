@@ -5,6 +5,7 @@
 #include <dwrite.h>
 #include "com_ptr.hpp"
 #include "input/input_state.hpp"
+#include "settings/settings.hpp"
 namespace overlay {
 class Renderer {
     ComPtr<ID2D1Factory> factory_;
@@ -17,6 +18,7 @@ class Renderer {
     HBITMAP bitmap_{};
     HGDIOBJ previous_{};
     UINT width_{}, height_{};
+    Settings preferences_;
     void release_surface();
     HRESULT surface(UINT width, UINT height);
 public:
@@ -25,6 +27,7 @@ public:
     Renderer& operator=(const Renderer&) = delete;
     ~Renderer() { release_surface(); }
     HRESULT initialize();
+    HRESULT configure(const Settings& settings);
     HRESULT draw(HWND window, const InputState& state, bool editing = false, bool resizing = false);
     void resize(UINT width, UINT height);
 };

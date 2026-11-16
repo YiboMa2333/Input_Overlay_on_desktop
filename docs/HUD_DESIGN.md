@@ -12,7 +12,7 @@ three letter columns. Key gaps are 6 units. A 132-unit-high curved mouse sits
 to the right, aligned with the top and bottom key edges. No screen-sized or
 group-sized background rectangle is drawn.
 
-- Key corner radius: 3.5 units. Main outline: 1.2 units, `#F2F0E7`.
+- Key corner radius: 3.5 units. Default outline: 1.2 units, `#FFFFFF`, now configurable.
 - Dark outside edging: 3.6 units, `#080A0D` at 85% alpha for light backgrounds.
 - Idle fill: `#101317` at 74% alpha; pressed fill: opaque `#D8CF45`.
 - Centered Segoe UI Semibold labels: 13 units, off-white when idle and dark when
@@ -21,6 +21,10 @@ group-sized background rectangle is drawn.
   reads middle-button state 2, with opaque dark backing so adjacent yellow regions
   do not bleed into it. Wheel movement shows an up/down yellow chevron until the
   input model's 180 ms pulse expires. X1/X2 are captured but not visualized.
+
+Colors, opacity, font, cap positions/visibility, spacing and mouse visibility are
+now configurable; see `CUSTOMIZATION.md`. The original SVG previews below are
+design references rather than generated previews of every custom theme.
 
 The same state snapshot feeds all shapes; multiple keys and mouse regions can
 light together. There is no text-event popup, input history or decorative animation

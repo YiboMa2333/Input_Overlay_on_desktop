@@ -3,6 +3,7 @@
 #include "input/raw_input.hpp"
 #include "render/renderer.hpp"
 #include "settings/settings.hpp"
+#include "settings/dialog.hpp"
 #include "geometry.hpp"
 #include <shellapi.h>
 namespace overlay {
@@ -13,6 +14,8 @@ class Window {
     RawInput capture_;
     Renderer renderer_;
     Settings settings_;
+    SettingsDialog settings_dialog_;
+    bool dirty_=true;
     bool attached_{}, session_notifications_{}, suspended_{};
     bool session_locked_{}, disconnected_{}, sleeping_{};
     bool tray_added_{}, hotkey_registered_{}, save_failed_{};
@@ -23,7 +26,8 @@ class Window {
     POINT drag_origin_{};
     void suspend_capture();
     void resume_capture();
-    void mode(bool edit);
+    void mode(bool edit,bool reveal=true);
+    bool customize(Settings preferences,bool reset);
     void persist();
     void recover(bool reset = false);
     void apply(placement::Rect rect);
@@ -36,6 +40,6 @@ class Window {
     static LRESULT CALLBACK procedure(HWND, UINT, WPARAM, LPARAM);
     LRESULT message(UINT, WPARAM, LPARAM);
 public:
-    int run(HINSTANCE instance, int show);
+    int run(HINSTANCE instance, int show,bool force_tray=false);
 };
 }

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "window.hpp"
 #include "commands.hpp"
+#include "render/hud_layout.hpp"
+#include "settings/startup.hpp"
 #include <wtsapi32.h>
 #include <windowsx.h>
 #include <string>
@@ -40,7 +42,7 @@ placement::Rect Window::bounds() const {
     return {double(r.left), double(r.top), double(r.right-r.left), double(r.bottom-r.top)};
 }
 void Window::apply(placement::Rect r) {
-    SetWindowPos(handle_, HWND_TOPMOST, static_cast<int>(std::lround(r.x)), static_cast<int>(std::lround(r.y)),
+    SetWindowPos(handle_, settings_.always_on_top?HWND_TOPMOST:HWND_NOTOPMOST, static_cast<int>(std::lround(r.x)), static_cast<int>(std::lround(r.y)),
         static_cast<int>(std::lround(r.w)), static_cast<int>(std::lround(r.h)), SWP_NOACTIVATE);
     InvalidateRect(handle_, nullptr, FALSE);
 }
@@ -50,6 +52,7 @@ void Window::persist() {
     settings_.x = static_cast<int>(r.x); settings_.y = static_cast<int>(r.y);
     settings_.width = MulDiv(static_cast<int>(r.w), 96, dpi);
     settings_.height = MulDiv(static_cast<int>(r.h), 96, dpi);
+    settings_.scale=std::clamp(static_cast<int>(std::lround(settings_.width*100/hud::extent(settings_).width)),50,400);
     save_failed_ = !settings_.save();
 }
 void Window::recover(bool reset) {
@@ -58,7 +61,8 @@ void Window::recover(bool reset) {
         MONITORINFO info{}; info.cbSize = sizeof(info);
         GetMonitorInfoW(MonitorFromPoint({0,0}, MONITOR_DEFAULTTOPRIMARY), &info);
         const auto dpi = GetDpiForWindow(handle_);
-        r = {double(info.rcWork.left+24), double(info.rcWork.top+24), 338.0*dpi/96, 148.0*dpi/96};
+        const auto extent=hud::extent(settings_);
+        r = {double(info.rcWork.left+24), double(info.rcWork.top+24), extent.width*dpi/96, extent.height*dpi/96};
     }
     apply(placement::recover(r, screens(), reset));
     persist();
@@ -89,7 +93,7 @@ void Window::hotkey() {
         && Settings::valid_hotkey(settings_.hotkey_modifiers, settings_.hotkey_vk)
         && RegisterHotKey(handle_, hotkey_id, settings_.hotkey_modifiers | MOD_NOREPEAT, settings_.hotkey_vk);
 }
-void Window::mode(bool edit) {
+void Window::mode(bool edit,bool reveal) {
     end_drag(); settings_.edit = edit;
     auto style = GetWindowLongPtrW(handle_, GWL_EXSTYLE);
     // Layered WS_EX_TRANSPARENT skips this HWND during hit testing across
@@ -97,12 +101,32 @@ void Window::mode(bool edit) {
     if (edit) style &= ~(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE);
     else style |= WS_EX_TRANSPARENT | WS_EX_NOACTIVATE;
     SetWindowLongPtrW(handle_, GWL_EXSTYLE, style);
-    SetWindowPos(handle_, HWND_TOPMOST, 0,0,0,0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    SetWindowPos(handle_, settings_.always_on_top?HWND_TOPMOST:HWND_NOTOPMOST, 0,0,0,0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    if(reveal) ShowWindow(handle_,SW_SHOWNOACTIVATE);
     // Remove edit alpha catcher and controls immediately, before returning to the user.
-    renderer_.draw(handle_, state_, settings_.edit);
+    if(renderer_.draw(handle_,state_,settings_.edit)==S_FALSE) dirty_=true;
     persist(); tray(false);
     if (!edit && GetForegroundWindow() == handle_ && IsWindow(previous_foreground_))
         SetForegroundWindow(previous_foreground_);
+}
+bool Window::customize(Settings preferences,bool reset) {
+    end_drag();preferences.validate();
+    if(FAILED(renderer_.configure(preferences))) return false;
+    if(preferences.start_windows!=settings_.start_windows) {
+        wchar_t executable[32768]{};const auto count=GetModuleFileNameW(nullptr,executable,32768);
+        if(!count||count>=32768||!set_startup(preferences.start_windows,executable)) {renderer_.configure(settings_);return false;}
+    }
+    const auto old=hud::extent(settings_),next=hud::extent(preferences);
+    const bool resize=old.width!=next.width||old.height!=next.height||settings_.scale!=preferences.scale;
+    preferences.file=settings_.file;settings_=preferences;
+    if(reset) recover(true);
+    else if(resize) {
+        auto r=bounds();const auto dpi=GetDpiForWindow(handle_);
+        r.w=next.width*settings_.scale*dpi/9600;r.h=next.height*settings_.scale*dpi/9600;apply(r);
+    }
+    hotkey();mode(settings_.edit);dirty_=true;InvalidateRect(handle_,nullptr,FALSE);
+    if(settings_.hotkey_enabled&&!hotkey_registered_) MessageBoxW(settings_dialog_.handle(),L"Settings were applied, but this shortcut is unavailable. Choose another combination; tray controls still work.",L"Shortcut conflict",MB_ICONINFORMATION);
+    return !save_failed_;
 }
 void Window::menu() {
     HMENU popup = CreatePopupMenu(), options = CreatePopupMenu();
@@ -111,7 +135,7 @@ void Window::menu() {
     AppendMenuW(popup, MF_STRING | (!settings_.edit ? MF_CHECKED : 0), command::lock, L"Lock Overlay");
     AppendMenuW(popup, MF_STRING, command::reset, L"Reset Position");
     AppendMenuW(options, MF_STRING | (settings_.aspect_lock ? MF_CHECKED : 0), command::aspect, L"Lock aspect ratio");
-    AppendMenuW(options, MF_STRING, command::settings, L"Open configuration...");
+    AppendMenuW(options, MF_STRING, command::settings, L"Customize overlay...");
     AppendMenuW(options, MF_STRING, command::reload, L"Reload configuration");
     const auto status = !settings_.hotkey_enabled ? L"Shortcut: disabled" : hotkey_registered_ ? L"Shortcut: registered" : L"Shortcut: unavailable (conflict)";
     AppendMenuW(options, MF_STRING | MF_GRAYED, 0, status);
@@ -135,15 +159,13 @@ void Window::command(unsigned id) {
     case command::reset: end_drag(); recover(true); break;
     case command::aspect: settings_.aspect_lock = !settings_.aspect_lock; persist(); break;
     case command::settings:
-        if (settings_.file.empty()) { MessageBoxW(handle_, L"The configuration directory is not writable.", L"Input Overlay", MB_ICONERROR); break; }
-        persist();
-        ShellExecuteW(handle_, L"open", L"notepad.exe", (L"\""+settings_.file+L"\"").c_str(), nullptr, SW_SHOWNORMAL);
+        persist();settings_dialog_.show(handle_,settings_,[this](Settings preferences,bool reset){return customize(std::move(preferences),reset);});
         break;
     case command::reload: {
         end_drag(); settings_ = Settings::load();
         const auto dpi = GetDpiForWindow(handle_);
         apply({double(settings_.x),double(settings_.y),double(MulDiv(settings_.width,dpi,96)),double(MulDiv(settings_.height,dpi,96))});
-        hotkey(); recover(); mode(settings_.edit); break;
+        renderer_.configure(settings_);hotkey(); recover(); mode(settings_.edit); break;
     }
     case command::exit: DestroyWindow(handle_); break;
     }
@@ -202,8 +224,11 @@ LRESULT Window::message(UINT msg, WPARAM w, LPARAM l) {
             const auto position = GetMessagePos();
             POINT p{GET_X_LPARAM(position),GET_Y_LPARAM(position)};
             const double dpi = GetDpiForWindow(handle_)/96.0;
+            const auto extent=hud::extent(settings_);
             apply(placement::drag(drag_start_,dragging_,p.x-drag_origin_.x,p.y-drag_origin_.y,
-                settings_.aspect_lock,(w&MK_SHIFT)!=0,{169*dpi,74*dpi,2028*dpi,888*dpi}));
+                settings_.aspect_lock,(w&MK_SHIFT)!=0,{std::max(32.0,extent.width*0.5)*dpi,
+                    std::max(24.0,extent.height*0.5)*dpi,std::min(6000.0,extent.width*4.0)*dpi,
+                    std::min(4000.0,extent.height*4.0)*dpi},extent.width/extent.height));
         }
         return 0;
     case WM_LBUTTONUP: end_drag(); return 0;
@@ -238,13 +263,19 @@ LRESULT Window::message(UINT msg, WPARAM w, LPARAM l) {
         return TRUE;
     case WM_ACTIVATEAPP: if(attached_) capture_.recover(state_); return 0;
     case WM_INPUT:
-        capture_.handle(reinterpret_cast<HRAWINPUT>(l),state_); InvalidateRect(handle_,nullptr,FALSE);
+    {   const auto keys=state_.keys;const auto buttons=state_.buttons;const auto wheel=state_.wheel;
+        capture_.handle(reinterpret_cast<HRAWINPUT>(l),state_);
+        dirty_=dirty_||keys!=state_.keys||buttons!=state_.buttons||wheel!=state_.wheel;
         return DefWindowProcW(handle_,msg,w,l);
+    }
     case WM_TIMER:
+    {   const auto keys=state_.keys;const auto buttons=state_.buttons;const auto wheel=state_.wheel;
         if(!suspended_ && attached_) capture_.recover(state_);
-        state_.expire(); InvalidateRect(handle_,nullptr,FALSE);
+        state_.expire();dirty_=dirty_||keys!=state_.keys||buttons!=state_.buttons||wheel!=state_.wheel;
+        if(dirty_&&IsWindowVisible(handle_)) InvalidateRect(handle_,nullptr,FALSE);
         if(!tray_added_ && GetTickCount64() >= next_tray_retry_) { tray(true); next_tray_retry_ = GetTickCount64()+2000; }
         return 0;
+    }
     case WM_SIZE: renderer_.resize(LOWORD(l),HIWORD(l)); InvalidateRect(handle_,nullptr,FALSE); return 0;
     case WM_ERASEBKGND: return 1;
     case WM_PAINT: {
@@ -252,6 +283,7 @@ LRESULT Window::message(UINT msg, WPARAM w, LPARAM l) {
         const auto hr = renderer_.draw(handle_,state_,settings_.edit,
             dragging_ != placement::Handle::None && dragging_ != placement::Handle::Move);
         EndPaint(handle_,&p);
+        dirty_=hr==S_FALSE;
         if(FAILED(hr)) { MessageBoxW(handle_,L"Direct2D rendering failed.",L"Input Overlay",MB_ICONERROR); DestroyWindow(handle_); }
         return 0;
     }
@@ -266,13 +298,14 @@ LRESULT Window::message(UINT msg, WPARAM w, LPARAM l) {
     }
     return DefWindowProcW(handle_,msg,w,l);
 }
-int Window::run(HINSTANCE instance, int show) {
+int Window::run(HINSTANCE instance, int show,bool force_tray) {
     settings_ = Settings::load();
     if(FAILED(renderer_.initialize())) { MessageBoxW(nullptr,L"Cannot initialize Direct2D.",L"Input Overlay",MB_ICONERROR); return 1; }
+    if(FAILED(renderer_.configure(settings_))) return 1;
     WNDCLASSW klass{}; klass.lpfnWndProc = procedure; klass.hInstance = instance;
     klass.lpszClassName = class_name; klass.hCursor = LoadCursorW(nullptr,IDC_ARROW);
     if(!RegisterClassW(&klass)) return 1;
-    handle_ = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST
+    handle_ = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | (settings_.always_on_top?WS_EX_TOPMOST:0)
         | (settings_.edit ? 0 : WS_EX_TRANSPARENT),class_name,L"Input Overlay Desktop",WS_POPUP,
         settings_.x,settings_.y,settings_.width,settings_.height,nullptr,nullptr,instance,this);
     if(!handle_) return 1;
@@ -281,15 +314,15 @@ int Window::run(HINSTANCE instance, int show) {
     recover(); taskbar_created_ = RegisterWindowMessageW(L"TaskbarCreated");
     session_notifications_ = WTSRegisterSessionNotification(handle_,NOTIFY_FOR_THIS_SESSION)!=FALSE;
     attached_ = capture_.attach(handle_); hotkey();
-    if(!session_notifications_ || !attached_ || !SetTimer(handle_,1,16,nullptr) || !tray(true)) {
+    if(!session_notifications_ || !attached_ || !SetTimer(handle_,1,33,nullptr) || !tray(true)) {
         MessageBoxW(handle_,L"Cannot start input capture, timer, session notifications or recovery tray icon.",L"Input Overlay",MB_ICONERROR);
         DestroyWindow(handle_); return 1;
     }
-    mode(settings_.edit);
+    mode(settings_.edit,false);
     if(FAILED(renderer_.draw(handle_,state_,settings_.edit))) { DestroyWindow(handle_); return 1; }
-    ShowWindow(handle_,show == SW_HIDE ? SW_HIDE : SW_SHOWNOACTIVATE);
+    ShowWindow(handle_,show == SW_HIDE||force_tray||settings_.launch_tray ? SW_HIDE : SW_SHOWNOACTIVATE);
     MSG msg{}; int status;
-    while((status = GetMessageW(&msg,nullptr,0,0)) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }
+    while((status = GetMessageW(&msg,nullptr,0,0)) > 0) {if(!settings_dialog_.dispatch(msg)) {TranslateMessage(&msg);DispatchMessageW(&msg);} }
     if(IsWindow(handle_)) DestroyWindow(handle_);
     return status < 0 ? 1 : static_cast<int>(msg.wParam);
 }

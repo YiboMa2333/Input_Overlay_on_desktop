@@ -3,6 +3,8 @@
 // only this test's child overlay with an isolated LOCALAPPDATA configuration.
 #include <windows.h>
 #include <shellapi.h>
+#include <commctrl.h>
+#include <dlgs.h>
 #include <filesystem>
 #include <iostream>
 #include <fstream>
@@ -13,7 +15,10 @@
 #include <utility>
 #include <vector>
 #include "desktop/commands.hpp"
+#include "settings/dialog.hpp"
 namespace {
+// RGB edit controls in the legacy common color dialog; presence is checked.
+constexpr int COLOR_RED=706,COLOR_GREEN=707,COLOR_BLUE=708;
 int clicks{}, hotkeys{};
 COLORREF backdrop_color=RGB(55,65,80);
 HWND fixture{};
@@ -56,30 +61,45 @@ LRESULT CALLBACK procedure(HWND hwnd,UINT msg,WPARAM w,LPARAM l) {
     if(msg==WM_HOTKEY) { ++hotkeys;return 0; }
     return DefWindowProcW(hwnd,msg,w,l);
 }
-HWND launch(const std::wstring& executable) {
+HWND launch(const std::wstring& executable,bool visible=true) {
     STARTUPINFOW info{}; info.cb=sizeof(info);
     auto cmd=L"\""+executable+L"\"";
     check(CreateProcessW(executable.c_str(),cmd.data(),nullptr,nullptr,FALSE,0,nullptr,nullptr,&info,&child)!=FALSE,"launch standalone executable");
     HWND result{};
     for(int i=0;i<300 && !result;++i) {
-        std::pair<DWORD,HWND*> context{child.dwProcessId,&result};
+        struct Context { DWORD pid;HWND* result;bool visible; } context{child.dwProcessId,&result,visible};
         EnumWindows([](HWND hwnd,LPARAM data)->BOOL {
-            auto pair=reinterpret_cast<std::pair<DWORD,HWND*>*>(data);DWORD process{};GetWindowThreadProcessId(hwnd,&process);
+            auto context=reinterpret_cast<Context*>(data);DWORD process{};GetWindowThreadProcessId(hwnd,&process);
             wchar_t name[128]{};GetClassNameW(hwnd,name,128);
-            if(process==pair->first && std::wstring(name)==L"InputOverlayDesktopWindow" && IsWindowVisible(hwnd)) { *pair->second=hwnd;return FALSE; }
+            if(process==context->pid && std::wstring(name)==L"InputOverlayDesktopWindow" && (IsWindowVisible(hwnd)||!context->visible)) { *context->result=hwnd;return FALSE; }
             return TRUE;
         },reinterpret_cast<LPARAM>(&context));
         pump(30);
         if(WaitForSingleObject(child.hProcess,0)==WAIT_OBJECT_0) break;
     }
-    check(result!=nullptr,"native window becomes visible without OBS");return result;
+    check(result!=nullptr,"native window created without OBS");return result;
 }
 RECT rect(HWND w) { RECT r{};GetWindowRect(w,&r);return r; }
 void action(HWND hwnd,unsigned command) { SendMessageW(hwnd,WM_COMMAND,command,0);pump(100); }
+HWND common_dialog(HWND owner) {
+    HWND result{};
+    struct Context {HWND owner;HWND* result;};Context context{owner,&result};
+    for(int attempt=0;attempt<60&&!result;++attempt) {
+        EnumThreadWindows(GetWindowThreadProcessId(owner,nullptr),[](HWND w,LPARAM data)->BOOL {
+            auto context=reinterpret_cast<Context*>(data);wchar_t klass[64]{};GetClassNameW(w,klass,64);
+            if(GetWindow(w,GW_OWNER)==context->owner&&std::wstring(klass)==L"#32770"&&IsWindowVisible(w)) {*context->result=w;return FALSE;}return TRUE;
+        },reinterpret_cast<LPARAM>(&context));pump(25);
+    }return result;
+}
 void mouse(DWORD flag) { INPUT input{};input.type=INPUT_MOUSE;input.mi.dwFlags=flag;check(SendInput(1,&input,sizeof(input))==1,"mouse input injected into test desktop"); injected_button=flag==MOUSEEVENTF_LEFTDOWN; }
 void key(WORD vk,bool up=false) { INPUT input{};input.type=INPUT_KEYBOARD;input.ki.wVk=vk;
     input.ki.dwFlags=up?KEYEVENTF_KEYUP:0;check(SendInput(1,&input,sizeof(input))==1,"shortcut test input injected");injected_keys[vk]=!up; }
 void toggle_hotkey() { key(VK_CONTROL);key(VK_MENU);key(VK_F8);key(VK_F8,true);key(VK_MENU,true);key(VK_CONTROL,true);pump(100); }
+void field(HWND dialog,int id,const std::wstring& value) {
+    // Use the control's real edit path across processes (not caption APIs).
+    auto control=GetDlgItem(dialog,id);SendMessageW(control,EM_SETSEL,0,-1);
+    for(auto character:value) SendMessageW(control,WM_CHAR,character,1);
+}
 void pointer(POINT point,DWORD button=0) {
     INPUT input{};input.type=INPUT_MOUSE;
     const auto x=GetSystemMetrics(SM_XVIRTUALSCREEN),y=GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -283,6 +303,67 @@ int wmain(int argc,wchar_t** argv) {
     check(RegisterHotKey(fixture,19,MOD_CONTROL|MOD_ALT|MOD_NOREPEAT,VK_F8)!=FALSE,"exit releases global shortcut");
     hwnd=launch(executable);const auto before_hotkeys=hotkeys;toggle_hotkey();
     check(hotkeys==before_hotkeys+1 && (GetWindowLongPtrW(hwnd,GWL_EXSTYLE)&WS_EX_TRANSPARENT),"shortcut conflict keeps existing owner and tray fallback");
-    stop(hwnd);UnregisterHotKey(fixture,19);cleanup();
+    stop(hwnd);UnregisterHotKey(fixture,19);
+    // Modeless settings apply/persistence and common native picker interactions.
+    WritePrivateProfileStringW(L"window",L"hotkey_enabled",L"0",config.c_str());
+    hwnd=launch(executable);action(hwnd,overlay::command::settings);pump(150);
+    const HWND settings=GetLastActivePopup(hwnd);wchar_t klass[64]{};GetClassNameW(settings,klass,64);
+    check(std::wstring(klass)==L"InputOverlaySettings","native settings window opens");
+    using namespace overlay::settings_control;
+    check(GetDpiForWindow(settings)==GetDpiForWindow(hwnd),"settings window uses current monitor DPI");
+    PostMessageW(settings,WM_COMMAND,Pressed,0);pump(150);
+    auto picker=common_dialog(settings);
+    if(picker==settings||!GetDlgItem(picker,COLOR_RED)) {
+        wchar_t popup_class[64]{};GetClassNameW(picker,popup_class,64);std::wcerr<<L"Picker class "<<popup_class<<L" handle "<<picker<<L'\n';
+        EnumChildWindows(picker,[](HWND control,LPARAM)->BOOL {wchar_t klass[64]{};GetClassNameW(control,klass,64);std::wcerr<<L"Picker child "<<GetDlgCtrlID(control)<<L" "<<klass<<L'\n';return TRUE;},0);
+    }
+    check(picker!=settings&&GetDlgItem(picker,COLOR_RED),"native color picker opens");
+    for(auto pair:{std::pair{COLOR_RED,17},std::pair{COLOR_GREEN,34},std::pair{COLOR_BLUE,51}}) {
+        SendMessageW(picker,WM_NEXTDLGCTL,reinterpret_cast<WPARAM>(GetDlgItem(picker,pair.first)),TRUE);
+        const auto control=GetDlgItem(picker,pair.first);SendMessageW(control,EM_SETSEL,0,-1);
+        for(auto digit:std::to_wstring(pair.second)) SendMessageW(control,WM_CHAR,digit,1);
+    }
+    SendMessageW(GetDlgItem(picker,IDOK),BM_CLICK,0,0);pump(150);
+    wchar_t button[64]{};GetDlgItemTextW(settings,Pressed,button,64);
+    for(int i=0;i<80&&std::wstring(button).find(L"112233")==std::wstring::npos;++i) {PostMessageW(settings,WM_NULL,0,0);pump(25);GetDlgItemTextW(settings,Pressed,button,64);}
+    check(std::wstring(button).find(L"112233")!=std::wstring::npos,"color picker selection updates draft");
+    PostMessageW(settings,WM_COMMAND,FontPicker,0);pump(150);picker=common_dialog(settings);
+    check(picker!=settings&&GetDlgItem(picker,cmb1),"native font picker opens");
+    SendMessageW(picker,WM_COMMAND,IDCANCEL,0);pump(80);
+    field(settings,Family,L"Consolas");field(settings,FontSize,L"18");
+    field(settings,Thickness,L"2.0");field(settings,Background,L"50");
+    field(settings,Opacity,L"80");field(settings,Scale,L"125");field(settings,Spacing,L"56");
+    auto select_page=[&](int page) {auto tab=GetDlgItem(settings,Tab);SendMessageW(tab,WM_KEYDOWN,VK_HOME,0);
+        for(int i=0;i<page;++i) SendMessageW(tab,WM_KEYDOWN,VK_RIGHT,0);pump(80);};
+    select_page(1);check(IsWindowVisible(GetDlgItem(settings,Preset)),"layout tab controls visible");
+    field(settings,KeyX,L"88");field(settings,KeyY,L"18");CheckDlgButton(settings,KeyEnabled,BST_UNCHECKED);
+    CheckDlgButton(settings,Mouse,BST_UNCHECKED);
+    select_page(2);CheckDlgButton(settings,Topmost,BST_UNCHECKED);CheckDlgButton(settings,Edit,BST_UNCHECKED);
+    SendMessageW(settings,WM_COMMAND,Apply,0);pump(120);
+    check(GetPrivateProfileIntW(L"window",L"pressed_color",0,config.c_str())==0x112233,"settings Apply saves chosen color");
+    check(GetPrivateProfileIntW(L"window",L"key0_x",0,config.c_str())==88
+        &&GetPrivateProfileIntW(L"window",L"key0_enabled",1,config.c_str())==0,"custom key position and visibility saved");
+    check(GetPrivateProfileIntW(L"window",L"font_size",0,config.c_str())==18
+        &&GetPrivateProfileIntW(L"window",L"overlay_opacity",0,config.c_str())==80
+        &&GetPrivateProfileIntW(L"window",L"border_tenths",0,config.c_str())==20,"appearance edits applied from native controls");
+    check(!(GetWindowLongPtrW(hwnd,GWL_EXSTYLE)&WS_EX_TOPMOST)
+        &&(GetWindowLongPtrW(hwnd,GWL_EXSTYLE)&WS_EX_TRANSPARENT),"settings topmost toggle preserves locked click-through");
+    select_page(0);SetWindowPos(settings,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
+    RedrawWindow(settings,nullptr,nullptr,RDW_INVALIDATE|RDW_ALLCHILDREN|RDW_UPDATENOW);pump(150);
+    screenshot(settings,profile/L"settings-window.bmp");
+    select_page(1);SendMessageW(settings,WM_COMMAND,ResetLayout,0);SendMessageW(settings,WM_COMMAND,Apply,0);pump(100);
+    check(GetPrivateProfileIntW(L"window",L"key0_x",0,config.c_str())==70
+        &&GetPrivateProfileIntW(L"window",L"show_mouse",0,config.c_str())==1,"native layout reset restores arrangement and mouse");
+    SendMessageW(settings,WM_COMMAND,ResetGeometry,0);SendMessageW(settings,WM_COMMAND,Apply,0);pump(80);
+    SendMessageW(settings,WM_COMMAND,Apply,0);pump(80);
+    check(GetPrivateProfileIntW(L"window",L"scale",0,config.c_str())==100,"settings position/size reset retains 100 percent on repeated Apply");
+    SendMessageW(settings,WM_CLOSE,0,0);stop(hwnd);hwnd=launch(executable);
+    check(!(GetWindowLongPtrW(hwnd,GWL_EXSTYLE)&WS_EX_TOPMOST),"custom behavior survives restart");
+    stop(hwnd);
+    WritePrivateProfileStringW(L"window",L"launch_tray",L"1",config.c_str());
+    hwnd=launch(executable,false);pump(150);
+    check(!IsWindowVisible(hwnd),"launch-to-tray keeps HUD hidden");
+    action(hwnd,overlay::command::edit);check(IsWindowVisible(hwnd),"tray Edit reveals hidden HUD");
+    stop(hwnd);cleanup();
     std::wcout<<L"Windows integration passed; isolated profile and screenshots: "<<profile.wstring()<<L'\n';
 }

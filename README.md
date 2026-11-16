@@ -27,7 +27,8 @@ cmake --build build --config Release
 .\build\Release\InputOverlayDesktop.exe
 ```
 
-Run the automated state, geometry and settings tests (no third-party test framework):
+Run state, geometry, settings and packaging-policy tests (Python 3.9+ for packaging;
+no third-party test framework):
 
 ```powershell
 cmake --build build --config Release
@@ -85,7 +86,7 @@ as described in [the licensing notes](docs/LICENSING.md).
 
 ## Settings and usage
 
-The HUD starts **Locked**: always on top of ordinary windows, transparent, fully
+The HUD starts **Locked**: topmost by default, transparent, fully
 click-through (including visible key/mouse shapes), with no editing controls and
 no keyboard focus activation from ordinary clicks. Visualization remains active.
 
@@ -108,15 +109,21 @@ its default size; it works even when the overlay is offscreen or locked. Explore
 restart is handled by recreating the tray icon. Startup fails visibly if the
 recovery tray icon cannot be registered.
 
-Keys use thin off-white outlines, dark translucent fills and a warm yellow
+Open **Settings > Customize overlay** for native Appearance, Layout and Behavior
+tabs: color/font pickers, opacity, thickness, scale, spacing, per-key positioning
+and visibility, three presets, mouse visibility, topmost, startup, launch-to-tray
+and shortcut controls. Apply saves changes. See [customization and packaging](docs/CUSTOMIZATION.md)
+for ranges, coverage and outstanding limitations.
+
+Keys use thin white outlines, dark translucent fills and a warm yellow
 `#D8CF45` pressed state. The mouse uses matching vector outlines. Dark edging
 keeps white strokes visible on light desktops. All highlights read live state.
 See [HUD rendering notes and previews](docs/HUD_DESIGN.md).
 
 Position, logical size and mode are saved after completed edits, mode changes,
 recovery and shutdown to `%LOCALAPPDATA%\InputOverlayDesktop\settings.ini`.
-Use **Settings > Open configuration** and then **Reload configuration** after
-saving, or edit while the app is closed:
+Prefer the settings window. You can also edit the INI while closed or use
+**Settings > Reload configuration** after editing:
 
 ```ini
 [window]
@@ -131,12 +138,12 @@ hotkey_modifiers=3
 hotkey_vk=119
 ```
 
-Width accepts 169–2028 and height 74–888 logical pixels at 96 DPI. Invalid values
+Width accepts 32–6000 and height 24–4000 logical pixels at 96 DPI. Invalid values
 fall back to defaults. Screen x/y are signed physical coordinates, so monitors
 left/above the primary are supported. For 150% custom HUD size use width=507,
 height=222; Windows DPI scaling is applied in addition. Unlocked edge resizing
-uses nonuniform vector scaling. The legacy `topmost` setting is ignored: both
-modes stay above ordinary desktop windows.
+uses nonuniform vector scaling. The legacy `topmost` key is ignored; the current
+`always_on_top` preference is configurable and defaults to enabled.
 
 The default shortcut uses modifier bitmask 3 (Ctrl=2, Alt=1, Shift=4) and key 119
 (F8). Configuration accepts F1 through F11 with at least two Ctrl/Alt/Shift
@@ -165,12 +172,14 @@ exclusive-input applications have not been validated.
 | `src/input/input_state.*` | Bounded held-state arrays, mouse position and wheel expiry |
 | `src/render/renderer.*`, `hud_layout.hpp` | Vector HUD geometry, DirectWrite labels, alpha surface and visual state |
 | `src/settings/settings.*` | Validated INI settings and position persistence |
+| `src/settings/dialog.*`, `startup.hpp` | Native customization UI and current-user startup registration helper |
 | `src/desktop/window.*` | HWND lifecycle, message loop, topmost policy and refresh timer |
 | `src/desktop/geometry.hpp` | Handle hit testing, anchored resizing and monitor recovery without Win32 dependencies |
 | `src/main.cpp` | DPI setup and application entry point |
 
 All state mutation and drawing happen on the window thread; capture does not call
-the renderer. A 16 ms timer requests repaint; no background polling thread is needed.
+the renderer. A 33 ms timer redraws changed key/button/wheel state (approximately 30 FPS);
+idle input and unused mouse-coordinate motion do not continually redraw.
 Rendering recreates a lost Direct2D target. Capture unregisters on shutdown.
 The adapter tracks physical scan-code locations, separately tracks each device,
 and repairs missed releases. Shift and Ctrl combine left/right states visually.
@@ -199,10 +208,17 @@ passed, including cross-process click-through, drag/resize, restart persistence,
 hotkeys and recovery notifications. See [VALIDATION.md](docs/VALIDATION.md) for
 the exact scope, tool versions and remaining hardware checks.
 
-Remaining work includes configurable layouts, upstream preset
-conversion with asset clearance and gamepad support. Physical monitor unplugging,
+Private release-review staging can now be assembled with the executable, notices,
+dependency/source manifest and matching source ZIP. Distributable ZIPs and CI
+binary uploads remain blocked by the licence/runtime review hold. See
+[release review](docs/RELEASE_REVIEW.md) and [installation](docs/INSTALL.md).
+The [Windows x64 Actions workflow](.github/workflows/windows-x64.yml) builds and
+tests without uploading binaries during normal push/PR runs.
+
+Remaining work includes upstream preset conversion with asset clearance and gamepad support. Physical monitor unplugging,
 mixed-DPI monitor transitions, exclusive full-screen games and MSVC compilation
-still require separate validation. Very fast
+still require separate validation. GitHub Actions is added but has not run
+remotely; actual logon startup and broader performance benchmarks remain untested. Very fast
 press/release pairs between paints may not be visible.
 Horizontal wheel input is not implemented. Devices already held when capture
 starts are not seeded into state. A device disconnect while held can leave stale

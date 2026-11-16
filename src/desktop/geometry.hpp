@@ -27,7 +27,7 @@ inline Handle hit(Point p, double w, double h, double dpi_scale) {
     return p.x >= 0 && p.y >= 0 && p.x < w && p.y < h ? Handle::Move : Handle::None;
 }
 inline Rect drag(Rect start, Handle handle, double dx, double dy, bool aspect_lock,
-    bool shift, Limits limits) {
+    bool shift, Limits limits,double original_aspect=aspect) {
     if (handle == Handle::Move) return {start.x+dx, start.y+dy, start.w, start.h};
     const bool left = handle == Handle::W || handle == Handle::NW || handle == Handle::SW;
     const bool right = handle == Handle::E || handle == Handle::NE || handle == Handle::SE;
@@ -38,7 +38,7 @@ inline Rect drag(Rect start, Handle handle, double dx, double dy, bool aspect_lo
     double w = start.w + (left ? -dx : right ? dx : 0);
     double h = start.h + (top ? -dy : bottom ? dy : 0);
     if (aspect_lock || shift || corner) {
-        const double ratio = (aspect_lock || shift) ? aspect : start.w/start.h;
+        const double ratio = (aspect_lock || shift) ? original_aspect : start.w/start.h;
         if ((top || bottom) && (!(left || right) || std::abs(h/start.h-1) > std::abs(w/start.w-1))) w = h * ratio;
         const double low = std::max(limits.min_w, limits.min_h*ratio);
         const double high = std::min(limits.max_w, limits.max_h*ratio);
