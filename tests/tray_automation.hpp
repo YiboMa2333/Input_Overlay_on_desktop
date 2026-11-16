@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #pragma once
 #include <windows.h>
+#include <objbase.h>
+#include <oleauto.h>
+// WIN32_LEAN_AND_MEAN excludes COM declarations from windows.h. Include them
+// explicitly before the SDK's UI Automation interfaces (also needed by MSVC).
 #include <uiautomation.h>
 #include <string>
 #include "render/com_ptr.hpp"
