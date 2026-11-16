@@ -1,3 +1,7 @@
+# Historical validation log
+
+For the current licence audit and release procedure, see [RELEASE_REVIEW.md](RELEASE_REVIEW.md). Earlier hold statements below describe the state before that audit.
+
 # Validation record
 
 ## Customization and packaging verification, 2026-11-16

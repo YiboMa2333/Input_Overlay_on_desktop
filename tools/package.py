@@ -11,6 +11,7 @@ import shutil
 import struct
 import subprocess
 import zipfile
+import runtime_sources
 
 ROOT = Path(__file__).resolve().parents[1]
 SYSTEM_DLLS = set("kernel32.dll user32.dll gdi32.dll advapi32.dll shell32.dll comctl32.dll comdlg32.dll d2d1.dll dwrite.dll wtsapi32.dll ole32.dll oleaut32.dll ucrtbase.dll msvcrt.dll ntdll.dll bcrypt.dll shlwapi.dll rpcrt4.dll winmm.dll version.dll imm32.dll secur32.dll ws2_32.dll".split())
@@ -80,7 +81,7 @@ def validate_imports(names):
 
 
 def sources():
-    paths = [ROOT/n for n in ("CMakeLists.txt", "README.md", "LICENSE", "NOTICE.md", ".gitignore")]
+    paths = [ROOT/n for n in ("CMakeLists.txt", "README.md", "LICENSE", "NOTICE.md", ".gitignore", ".gitattributes")]
     for directory in ("src", "resources", "tests", "tools", "docs", "LICENSES", "release", ".github"):
         paths.extend(p for p in (ROOT/directory).rglob("*") if p.is_file() and "__pycache__" not in p.parts)
     paths = sorted(set(paths))
@@ -96,7 +97,10 @@ def digest(paths):
         relative = path.relative_to(ROOT).as_posix()
         if relative == "release/license-review.json":
             continue  # Avoid a self-referencing approval hash.
-        checksum.update(relative.encode()+b"\0"+path.read_bytes()+b"\0")
+        data = path.read_bytes()
+        if path.suffix not in (".png", ".ico"):
+            data = data.replace(b"\r\n", b"\n")
+        checksum.update(relative.encode()+b"\0"+data+b"\0")
     return checksum.hexdigest()
 
 
@@ -119,6 +123,8 @@ def main():
     parser.add_argument("--config", default="Release")
     parser.add_argument("--toolchain", required=True, choices=("msvc-static", "llvm-mingw-static"))
     parser.add_argument("--cmake", default="cmake")
+    parser.add_argument("--runtime-sources", type=Path)
+    parser.add_argument("--toolchain-root", type=Path)
     args = parser.parse_args()
     if args.mode == "release" and args.config != "Release":
         raise ValueError("Only Release configuration may be distributed; Debug runtimes are not cleared")
@@ -127,6 +133,16 @@ def main():
     cleared = approved(args.toolchain, source_hash)
     if args.mode == "release" and not cleared:
         raise ValueError("Release blocked: licence/runtime review is missing or does not match source/toolchain. Use stage for private review.")
+    runtime_record = None
+    if args.mode == "release":
+        if args.toolchain != "llvm-mingw-static" or not args.runtime_sources or not args.toolchain_root:
+            raise ValueError("Approved release requires LLVM-MinGW runtime sources and toolchain root")
+        runtime_record = json.loads((ROOT/"release/runtime-audit.json").read_text())
+        if runtime_sources.tree_digest(args.runtime_sources) != runtime_record["runtime_source_tree_sha256"]:
+            raise ValueError("Runtime source supplement differs from reviewed contents")
+        for name, expected in runtime_record["toolchain_files"].items():
+            if hashlib.sha256((args.toolchain_root/name).read_bytes()).hexdigest() != expected:
+                raise ValueError("Unreviewed toolchain file: "+name)
     output = args.output.resolve()
     if output.exists() and any(output.iterdir()):
         raise ValueError("Output must be a new/empty directory (no stale files)")
@@ -141,6 +157,9 @@ def main():
                 "executable_sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
                 "imports": dlls, "runtime_files": "Static C++ runtime; imported DLLs provided by Windows",
                 "licence_review_approved": cleared}
+    if runtime_record:
+        manifest["runtime_audit"] = runtime_record
+        shutil.copyfile(args.runtime_sources, stage/"runtime-sources.zip")
     (stage/"BUILD_MANIFEST.json").write_text(json.dumps(manifest, indent=2)+"\n", encoding="utf-8")
     with zipfile.ZipFile(stage/"corresponding-source.zip", "w", zipfile.ZIP_DEFLATED) as archive:
         for path in paths:

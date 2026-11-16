@@ -23,7 +23,7 @@ A native desktop adaptation of [univrsal/input-overlay](https://github.com/univr
 
 ## Installation
 
-> **Release status:** public binary downloads are on hold while the exact compiler-runtime licence review is completed. Local review ZIPs are not approved releases. Build from source today; do not download binaries from untrusted mirrors. [Review checklist](docs/RELEASE_REVIEW.md).
+> **Release status:** the pinned LLVM-MinGW portable build has completed its dependency/licence audit. Download only a published release containing the executable, notices and both source archives. Earlier `review.zip` files are not releases. [Audit and packaging instructions](docs/RELEASE_REVIEW.md).
 
 ### Portable setup: when an approved release is available
 
@@ -58,8 +58,6 @@ OBS SDK, submodules or network downloads are required by CMake.
 ```powershell
 git clone https://github.com/YiboMa2333/Input_Overlay_on_desktop.git
 cd Input_Overlay_on_desktop
-# Use the standalone application development branch:
-git switch develop/standalone-win32
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 .\build\Release\InputOverlayDesktop.exe
@@ -249,17 +247,17 @@ passed, including cross-process click-through, drag/resize, restart persistence,
 hotkeys and recovery notifications. See [VALIDATION.md](docs/VALIDATION.md) for
 the exact scope, tool versions and remaining hardware checks.
 
-Private release-review staging can now be assembled with the executable, notices,
-dependency/source manifest and matching source ZIP. Distributable ZIPs and CI
-binary uploads remain blocked by the licence/runtime review hold. See
+The reviewed LLVM-MinGW route packages the executable, notices, dependency
+manifest, application source ZIP and runtime source ZIP together. Approval is bound
+to the source snapshot and exact runtime files; MSVC binaries remain unapproved. See
 [release review](docs/RELEASE_REVIEW.md) and [installation](docs/INSTALL.md).
 The [Windows x64 Actions workflow](.github/workflows/windows-x64.yml) builds and
 tests without uploading binaries during normal push/PR runs.
 
 Remaining work includes upstream preset conversion with asset clearance and gamepad support. Physical monitor unplugging,
-mixed-DPI monitor transitions, exclusive full-screen games and MSVC compilation
-still require separate validation. GitHub Actions is added but has not run
-remotely; actual logon startup and broader performance benchmarks remain untested. Very fast
+mixed-DPI monitor transitions and exclusive full-screen games
+still require separate validation. MSVC compilation, headless tests and staging passed
+on GitHub Actions after the COM-header fix; actual logon startup and broader performance benchmarks remain untested. Very fast
 press/release pairs between paints may not be visible.
 Horizontal wheel input is not implemented. Devices already held when capture
 starts are not seeded into state. A device disconnect while held can leave stale

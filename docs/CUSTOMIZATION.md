@@ -100,7 +100,7 @@ has a fixed logical size; very small work areas at extreme DPI can clip it.
 
 Only one physical display is available, at 150% DPI. Mixed-DPI transitions and
 physical monitor removal remain untested by the user's earlier decision. The
-GitHub Actions workflow and MSVC route have not run remotely. Actual startup at
+GitHub Actions MSVC build, headless tests and staging have since passed; see RELEASE_REVIEW.md for the approved LLVM portable route. Actual startup at
 logon, signing/SmartScreen and a broad performance/accessibility matrix remain
 manual work. See VALIDATION and RELEASE_REVIEW for precise scope.
 

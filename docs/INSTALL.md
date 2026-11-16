@@ -1,15 +1,15 @@
 # Installation and use
 
-Binary release is currently on hold pending licence/runtime review. Build from
-source using README, or privately inspect review staging; do not redistribute
-unapproved staging as an installer or release.
+The pinned LLVM-MinGW portable route is reviewed for distribution with its
+notices and both source archives. See RELEASE_REVIEW.md. Older private review
+ZIPs and MSVC binaries are not covered by that approval.
 
 When an approved Windows x64 ZIP is available, extract the **entire** folder to
 a permanent writable location and run `InputOverlayDesktop.exe`. No OBS, admin
 installation or separate runtime installer is intended: compiler C++ runtime is
 linked statically, and supported Windows 10/11 supplies the imported system DLLs.
 The packager verifies that assumption for each executable. Keep LICENSE,
-LICENSES, NOTICE and the matching corresponding-source ZIP alongside it.
+LICENSES, NOTICE and the matching corresponding-source and runtime-sources ZIPs alongside it.
 
 - Double-click the tray icon or select **Open Settings**. The Appearance, Layout
   and Behavior tabs use Apply to save changes. Closing without Apply discards

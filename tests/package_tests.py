@@ -3,8 +3,10 @@ import importlib.util
 from pathlib import Path
 import struct
 import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/"tools"))
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +53,28 @@ class PolicyTests(unittest.TestCase):
             path.write_bytes(b"bad")
             with self.assertRaises((ValueError, struct.error)):
                 package.imports(path)
+
+    def test_runtime_source_digest_is_order_independent(self):
+        with tempfile.TemporaryDirectory() as folder:
+            paths = [Path(folder)/name for name in ("a.zip", "b.zip")]
+            for path, entries in zip(paths, (["one", "two"], ["two", "one"])):
+                with zipfile.ZipFile(path, "w") as archive:
+                    for name in entries:
+                        archive.writestr(name, name)
+            self.assertEqual(package.runtime_sources.tree_digest(paths[0]),
+                             package.runtime_sources.tree_digest(paths[1]))
+            with zipfile.ZipFile(paths[1], "a") as archive:
+                archive.writestr("changed", "different source")
+            self.assertNotEqual(package.runtime_sources.tree_digest(paths[0]),
+                                package.runtime_sources.tree_digest(paths[1]))
+
+    def test_unsafe_runtime_source_path_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder)/"unsafe.zip"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("../outside", "invalid")
+            with self.assertRaises(ValueError):
+                package.runtime_sources.tree_digest(path)
 
 
 if __name__ == "__main__":
