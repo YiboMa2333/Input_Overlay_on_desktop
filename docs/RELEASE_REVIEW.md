@@ -8,7 +8,7 @@ No public binary release is approved. `release/license-review.json` is deliberat
 | Application source | GPL-2.0-only; adapted upstream state header and attribution retained |
 | Original repository MIT notice | Preserved separately, not asserted as the combined application's licence |
 | Upstream dependencies/assets | No OBS/Qt/libuiohook/SDL/Mongoose or upstream texture assets imported |
-| New UI | Win32 common controls/dialogs, system font and icon; no bundled UI framework, font files or images |
+| New UI | Win32 common controls/dialogs and system fonts; original generated keyboard/mouse icon, generator and ICO source included; no imported image assets or UI framework |
 | Windows libraries | user32, gdi32, d2d1, dwrite, wtsapi32, shell32, comctl32, comdlg32, advapi32; imported DLLs audited from the built PE |
 | CI target | Windows x64, MSVC static CRT (/MT); static runtime avoids a missing VC runtime DLL, but does not by itself establish licence compatibility |
 | MSVC runtime | Review exact CRT/STL/SDK notices, redistribution terms and applicable GPL system-library treatment before approving this route |

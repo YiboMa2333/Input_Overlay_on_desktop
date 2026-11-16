@@ -76,15 +76,20 @@ void Window::end_drag(bool cancel) {
 }
 bool Window::tray(bool add) {
     NOTIFYICONDATAW data{}; data.cbSize = sizeof(data); data.hWnd = handle_; data.uID = 1;
-    data.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP;
+    data.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP | NIF_GUID;
+    data.guidItem=identity_.icon;
     data.uCallbackMessage = tray_message;
-    data.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
-    std::wstring tip = settings_.edit ? L"Input Overlay - Edit" : L"Input Overlay - Locked";
+    data.hIcon = icon_;
+    std::wstring tip = settings_.edit ? L"Input Overlay Desktop - Edit" : L"Input Overlay Desktop - Locked";
     if (settings_.hotkey_enabled && !hotkey_registered_) tip += L" (shortcut unavailable)";
     if (save_failed_) tip += L" (settings not saved)";
     tip.copy(data.szTip, 127); data.szTip[tip.size() < 127 ? tip.size() : 127] = 0;
-    if (!Shell_NotifyIconW(add ? NIM_ADD : NIM_MODIFY, &data)) return false;
-    if (add) { data.uVersion = NOTIFYICON_VERSION_4; Shell_NotifyIconW(NIM_SETVERSION, &data); }
+    if(!Shell_NotifyIconW(add?NIM_ADD:NIM_MODIFY,&data)) {
+        if(!add) {tray_added_=false;return false;}
+        // A duplicate recovery notification can arrive while the icon exists.
+        if(!Shell_NotifyIconW(NIM_MODIFY,&data)) return false;
+    }
+    if(add) {data.uVersion=NOTIFYICON_VERSION_4;tray_version4_=Shell_NotifyIconW(NIM_SETVERSION,&data)!=FALSE;}
     tray_added_ = true; return true;
 }
 void Window::hotkey() {
@@ -129,11 +134,17 @@ bool Window::customize(Settings preferences,bool reset) {
     return !save_failed_;
 }
 void Window::menu() {
+    if(menu_open_) return;
     HMENU popup = CreatePopupMenu(), options = CreatePopupMenu();
     if (!popup || !options) { if(popup) DestroyMenu(popup); if(options) DestroyMenu(options); return; }
+    menu_open_=true;
+    AppendMenuW(popup,MF_STRING,command::settings,L"Open Settings");
+    AppendMenuW(popup,MF_STRING,command::visibility,IsWindowVisible(handle_)?L"Hide Overlay":L"Show Overlay");
+    AppendMenuW(popup,MF_SEPARATOR,0,nullptr);
     AppendMenuW(popup, MF_STRING | (settings_.edit ? MF_CHECKED : 0), command::edit, L"Edit Overlay");
     AppendMenuW(popup, MF_STRING | (!settings_.edit ? MF_CHECKED : 0), command::lock, L"Lock Overlay");
-    AppendMenuW(popup, MF_STRING, command::reset, L"Reset Position");
+    AppendMenuW(popup, MF_STRING, command::reset, L"Reset Position and Size");
+    AppendMenuW(popup,MF_STRING|(settings_.start_windows?MF_CHECKED:0),command::startup,L"Start with Windows");
     AppendMenuW(options, MF_STRING | (settings_.aspect_lock ? MF_CHECKED : 0), command::aspect, L"Lock aspect ratio");
     AppendMenuW(options, MF_STRING, command::settings, L"Customize overlay...");
     AppendMenuW(options, MF_STRING, command::reload, L"Reload configuration");
@@ -149,11 +160,24 @@ void Window::menu() {
     auto selected = TrackPopupMenu(popup, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON,
         point.x, point.y, 0, handle_, nullptr);
     DestroyMenu(popup);
+    menu_open_=false;
     if (selected) command(selected);
-    PostMessageW(handle_, WM_NULL, 0, 0);
+    if(IsWindow(handle_)) PostMessageW(handle_, WM_NULL, 0, 0);
+    NOTIFYICONDATAW focus{};focus.cbSize=sizeof(focus);focus.hWnd=handle_;focus.uID=1;focus.uFlags=NIF_GUID;focus.guidItem=identity_.icon;
+    if(!selected&&IsWindow(handle_)) Shell_NotifyIconW(NIM_SETFOCUS,&focus);
 }
 void Window::command(unsigned id) {
     switch(id) {
+    case command::visibility:
+        end_drag();ShowWindow(handle_,IsWindowVisible(handle_)?SW_HIDE:SW_SHOWNOACTIVATE);
+        dirty_=true;tray(false);break;
+    case command::startup: {
+        wchar_t executable[32768]{};const auto n=GetModuleFileNameW(nullptr,executable,32768);
+        if(!n||n>=32768||!set_startup(!settings_.start_windows,executable)) {
+            MessageBoxW(handle_,L"Could not update current-user Windows startup.",L"Input Overlay Desktop",MB_ICONERROR);break;
+        }
+        settings_.start_windows=!settings_.start_windows;persist();tray(false);break;
+    }
     case command::edit: mode(true); break;
     case command::lock: mode(false); break;
     case command::reset: end_drag(); recover(true); break;
@@ -188,10 +212,14 @@ LRESULT CALLBACK Window::procedure(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
     return self ? self->message(msg,w,l) : DefWindowProcW(hwnd,msg,w,l);
 }
 LRESULT Window::message(UINT msg, WPARAM w, LPARAM l) {
+    if(identity_.activate&&msg==identity_.activate) {command(command::settings);return 0;}
     if (taskbar_created_ && msg == taskbar_created_) { tray_added_ = false; tray(true); return 0; }
     switch(msg) {
     case tray_message:
-        if (LOWORD(l) == WM_CONTEXTMENU || LOWORD(l) == NIN_SELECT || LOWORD(l) == NIN_KEYSELECT) menu();
+        if(LOWORD(l)==WM_LBUTTONDBLCLK||LOWORD(l)==NIN_KEYSELECT) command(command::settings);
+        else if(LOWORD(l)==WM_RBUTTONUP) {last_right_menu_=GetTickCount64();menu();}
+        else if(LOWORD(l)==WM_CONTEXTMENU && ((GET_X_LPARAM(w)==-1&&GET_Y_LPARAM(w)==-1)
+            ||GetTickCount64()-last_right_menu_>250)) menu();
         return 0;
     case WM_COMMAND: command(LOWORD(w)); return 0;
     case WM_HOTKEY: if (w == hotkey_id) mode(!settings_.edit); return 0;
@@ -291,27 +319,36 @@ LRESULT Window::message(UINT msg, WPARAM w, LPARAM l) {
         persist(); KillTimer(handle_,1); capture_.detach(); attached_ = false; state_.clear();
         if(hotkey_registered_) UnregisterHotKey(handle_,hotkey_id);
         if(session_notifications_) WTSUnRegisterSessionNotification(handle_);
-        NOTIFYICONDATAW icon{}; icon.cbSize = sizeof(icon); icon.hWnd = handle_; icon.uID = 1;
+        NOTIFYICONDATAW icon{}; icon.cbSize = sizeof(icon); icon.hWnd = handle_; icon.uID = 1;icon.uFlags=NIF_GUID;icon.guidItem=identity_.icon;
         Shell_NotifyIconW(NIM_DELETE,&icon); tray_added_ = false;
+        if(icon_) {DestroyIcon(icon_);icon_=nullptr;}
+        if(!identity_.key.empty()) RemovePropW(handle_,identity_.key.c_str());
         PostQuitMessage(0); return 0;
     }
     }
     return DefWindowProcW(handle_,msg,w,l);
 }
-int Window::run(HINSTANCE instance, int show,bool force_tray) {
+int Window::run(HINSTANCE instance,int show,bool force_tray,InstanceIdentity identity) {
+    identity_=identity.key.empty()?instance_identity():std::move(identity);
+    icon_=static_cast<HICON>(LoadImageW(instance,MAKEINTRESOURCEW(101),IMAGE_ICON,
+        GetSystemMetrics(SM_CXSMICON),GetSystemMetrics(SM_CYSMICON),0));
+    if(!icon_) {MessageBoxW(nullptr,L"Cannot load the embedded application icon.",L"Input Overlay Desktop",MB_ICONERROR);return 1;}
     settings_ = Settings::load();
     if(FAILED(renderer_.initialize())) { MessageBoxW(nullptr,L"Cannot initialize Direct2D.",L"Input Overlay",MB_ICONERROR); return 1; }
     if(FAILED(renderer_.configure(settings_))) return 1;
     WNDCLASSW klass{}; klass.lpfnWndProc = procedure; klass.hInstance = instance;
     klass.lpszClassName = class_name; klass.hCursor = LoadCursorW(nullptr,IDC_ARROW);
+    klass.hIcon=LoadIconW(instance,MAKEINTRESOURCEW(101));
     if(!RegisterClassW(&klass)) return 1;
     handle_ = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | (settings_.always_on_top?WS_EX_TOPMOST:0)
         | (settings_.edit ? 0 : WS_EX_TRANSPARENT),class_name,L"Input Overlay Desktop",WS_POPUP,
         settings_.x,settings_.y,settings_.width,settings_.height,nullptr,nullptr,instance,this);
     if(!handle_) return 1;
+    SendMessageW(handle_,WM_SETICON,ICON_SMALL,reinterpret_cast<LPARAM>(icon_));
     const auto dpi = GetDpiForWindow(handle_);
     apply({double(settings_.x),double(settings_.y),double(MulDiv(settings_.width,dpi,96)),double(MulDiv(settings_.height,dpi,96))});
     recover(); taskbar_created_ = RegisterWindowMessageW(L"TaskbarCreated");
+    if(taskbar_created_) ChangeWindowMessageFilterEx(handle_,taskbar_created_,MSGFLT_ALLOW,nullptr);
     session_notifications_ = WTSRegisterSessionNotification(handle_,NOTIFY_FOR_THIS_SESSION)!=FALSE;
     attached_ = capture_.attach(handle_); hotkey();
     if(!session_notifications_ || !attached_ || !SetTimer(handle_,1,33,nullptr) || !tray(true)) {
@@ -321,6 +358,7 @@ int Window::run(HINSTANCE instance, int show,bool force_tray) {
     mode(settings_.edit,false);
     if(FAILED(renderer_.draw(handle_,state_,settings_.edit))) { DestroyWindow(handle_); return 1; }
     ShowWindow(handle_,show == SW_HIDE||force_tray||settings_.launch_tray ? SW_HIDE : SW_SHOWNOACTIVATE);
+    if(!SetPropW(handle_,identity_.key.c_str(),reinterpret_cast<HANDLE>(1))) {DestroyWindow(handle_);return 1;}
     MSG msg{}; int status;
     while((status = GetMessageW(&msg,nullptr,0,0)) > 0) {if(!settings_dialog_.dispatch(msg)) {TranslateMessage(&msg);DispatchMessageW(&msg);} }
     if(IsWindow(handle_)) DestroyWindow(handle_);

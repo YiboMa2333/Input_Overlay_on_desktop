@@ -17,7 +17,8 @@ EXE = Path(sys.argv[1]) if len(sys.argv)>1 else None
 class PolicyTests(unittest.TestCase):
     def test_source_includes_attribution(self):
         names = {p.relative_to(ROOT).as_posix() for p in package.sources()}
-        self.assertTrue({"LICENSE", "NOTICE.md", "LICENSES/MIT.txt", "src/input/input_state.cpp"} <= names)
+        self.assertTrue({"LICENSE", "NOTICE.md", "LICENSES/MIT.txt", "src/input/input_state.cpp",
+                         "resources/app.ico", "resources/app.manifest", "tools/make_icon.py"} <= names)
 
     def test_release_hold(self):
         with patch.object(package.json, "loads", return_value={"approved": False}):

@@ -5,6 +5,7 @@
 #include "settings/settings.hpp"
 #include "settings/dialog.hpp"
 #include "geometry.hpp"
+#include "instance.hpp"
 #include <shellapi.h>
 namespace overlay {
 class Window {
@@ -16,6 +17,11 @@ class Window {
     Settings settings_;
     SettingsDialog settings_dialog_;
     bool dirty_=true;
+    InstanceIdentity identity_;
+    HICON icon_{};
+    bool tray_version4_{};
+    bool menu_open_{};
+    ULONGLONG last_right_menu_{};
     bool attached_{}, session_notifications_{}, suspended_{};
     bool session_locked_{}, disconnected_{}, sleeping_{};
     bool tray_added_{}, hotkey_registered_{}, save_failed_{};
@@ -40,6 +46,7 @@ class Window {
     static LRESULT CALLBACK procedure(HWND, UINT, WPARAM, LPARAM);
     LRESULT message(UINT, WPARAM, LPARAM);
 public:
-    int run(HINSTANCE instance, int show,bool force_tray=false);
+    ~Window() {if(icon_) DestroyIcon(icon_);}
+    int run(HINSTANCE instance,int show,bool force_tray=false,InstanceIdentity identity={});
 };
 }

@@ -29,6 +29,8 @@ def imports(path):
     optional = pe+24
     if machine != 0x8664 or optional_size < 224 or struct.unpack_from("<H", data, optional)[0] != 0x20B:
         raise ValueError("Package requires Windows x64 PE32+")
+    if struct.unpack_from("<H",data,optional+68)[0] != 2:
+        raise ValueError("Package requires Windows GUI subsystem (no console)")
     sections = optional+optional_size
 
     def offset(rva):
@@ -79,7 +81,7 @@ def validate_imports(names):
 
 def sources():
     paths = [ROOT/n for n in ("CMakeLists.txt", "README.md", "LICENSE", "NOTICE.md", ".gitignore")]
-    for directory in ("src", "tests", "tools", "docs", "LICENSES", "release", ".github"):
+    for directory in ("src", "resources", "tests", "tools", "docs", "LICENSES", "release", ".github"):
         paths.extend(p for p in (ROOT/directory).rglob("*") if p.is_file() and "__pycache__" not in p.parts)
     paths = sorted(set(paths))
     for path in paths:
@@ -111,7 +113,7 @@ def approved(toolchain, source_hash):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("stage", "release"))
+    parser.add_argument("mode", choices=("stage", "review", "release"))
     parser.add_argument("--build", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--config", default="Release")
@@ -143,8 +145,10 @@ def main():
     with zipfile.ZipFile(stage/"corresponding-source.zip", "w", zipfile.ZIP_DEFLATED) as archive:
         for path in paths:
             archive.write(path, path.relative_to(ROOT).as_posix())
-    if args.mode == "stage":
+    if args.mode != "release":
         (stage/"PRIVATE_REVIEW_ONLY.txt").write_text("Not approved for release. Do not upload/distribute this review staging.\n", encoding="utf-8")
+        if args.mode == "review":
+            shutil.make_archive(str(output/"InputOverlayDesktop-windows-x64-review"), "zip", output, stage.name)
     else:
         shutil.make_archive(str(output/"InputOverlayDesktop-windows-x64"), "zip", output, stage.name)
     print(json.dumps(manifest, indent=2))

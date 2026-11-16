@@ -16,6 +16,8 @@
 #include <vector>
 #include "desktop/commands.hpp"
 #include "settings/dialog.hpp"
+#include "desktop/instance.hpp"
+#include "tray_automation.hpp"
 namespace {
 // RGB edit controls in the legacy common color dialog; presence is checked.
 constexpr int COLOR_RED=706,COLOR_GREEN=707,COLOR_BLUE=708;
@@ -61,10 +63,15 @@ LRESULT CALLBACK procedure(HWND hwnd,UINT msg,WPARAM w,LPARAM l) {
     if(msg==WM_HOTKEY) { ++hotkeys;return 0; }
     return DefWindowProcW(hwnd,msg,w,l);
 }
-HWND launch(const std::wstring& executable,bool visible=true) {
+HWND launch(const std::wstring& executable,bool visible=true,bool shell_open=false) {
     STARTUPINFOW info{}; info.cb=sizeof(info);
     auto cmd=L"\""+executable+L"\"";
-    check(CreateProcessW(executable.c_str(),cmd.data(),nullptr,nullptr,FALSE,0,nullptr,nullptr,&info,&child)!=FALSE,"launch standalone executable");
+    if(shell_open) {
+        SHELLEXECUTEINFOW open{};open.cbSize=sizeof(open);open.fMask=SEE_MASK_NOCLOSEPROCESS|SEE_MASK_NOASYNC|SEE_MASK_FLAG_NO_UI;
+        open.lpVerb=L"open";open.lpFile=executable.c_str();open.nShow=SW_SHOWNOACTIVATE;
+        check(ShellExecuteExW(&open)!=FALSE&&open.hProcess,"Shell Open launches EXE (Explorer double-click path)");
+        child.hProcess=open.hProcess;child.dwProcessId=GetProcessId(open.hProcess);
+    } else check(CreateProcessW(executable.c_str(),cmd.data(),nullptr,nullptr,FALSE,0,nullptr,nullptr,&info,&child)!=FALSE,"launch standalone executable");
     HWND result{};
     for(int i=0;i<300 && !result;++i) {
         struct Context { DWORD pid;HWND* result;bool visible; } context{child.dwProcessId,&result,visible};
@@ -159,10 +166,25 @@ int wmain(int argc,wchar_t** argv) {
         area.left,area.top,area.right-area.left,area.bottom-area.top,nullptr,nullptr,wc.hInstance,nullptr);
     ShowWindow(fixture,SW_SHOW);SetForegroundWindow(fixture);pump(100);
     const std::wstring executable=std::filesystem::absolute(argv[1]).wstring();
-    auto hwnd=launch(executable);overlay_window=hwnd;
+    auto hwnd=launch(executable,true,true);overlay_window=hwnd;
+    check(GetClassLongPtrW(hwnd,GCLP_HICON)!=0&&SendMessageW(hwnd,WM_GETICON,ICON_SMALL,0)!=0,"embedded custom icons loaded");
+    PROCESS_INFORMATION duplicate{};STARTUPINFOW duplicate_info{};duplicate_info.cb=sizeof(duplicate_info);
+    auto duplicate_command=L"\""+executable+L"\"";
+    check(CreateProcessW(executable.c_str(),duplicate_command.data(),nullptr,nullptr,FALSE,0,nullptr,nullptr,&duplicate_info,&duplicate)!=FALSE,"second launch starts guarded process");
+    const auto duplicate_deadline=GetTickCount64()+7000;
+    while(WaitForSingleObject(duplicate.hProcess,0)==WAIT_TIMEOUT&&GetTickCount64()<duplicate_deadline) pump(25);
+    check(WaitForSingleObject(duplicate.hProcess,0)==WAIT_OBJECT_0,"duplicate launch exits without another overlay");
+    DWORD duplicate_status{};GetExitCodeProcess(duplicate.hProcess,&duplicate_status);
+    check(duplicate_status==0,"duplicate activation succeeds");CloseHandle(duplicate.hThread);CloseHandle(duplicate.hProcess);pump(150);
+    auto duplicate_settings=GetLastActivePopup(hwnd);wchar_t duplicate_class[64]{};GetClassNameW(duplicate_settings,duplicate_class,64);
+    check(std::wstring(duplicate_class)==L"InputOverlaySettings","second launch opens existing Settings");
+    SendMessageW(duplicate_settings,WM_CLOSE,0,0);pump(80);
+    check(IsWindow(hwnd)&&WaitForSingleObject(child.hProcess,0)==WAIT_TIMEOUT,"closing Settings leaves app running");
+    action(hwnd,overlay::command::visibility);check(!IsWindowVisible(hwnd),"tray Hide Overlay hides only HUD");
+    action(hwnd,overlay::command::visibility);check(IsWindowVisible(hwnd),"tray Show Overlay restores HUD");
     check((GetWindowLongPtrW(hwnd,GWL_EXSTYLE)&(WS_EX_TRANSPARENT|WS_EX_NOACTIVATE|WS_EX_TOPMOST))
         ==(WS_EX_TRANSPARENT|WS_EX_NOACTIVATE|WS_EX_TOPMOST),"locked startup styles and always-on-top");
-    NOTIFYICONIDENTIFIER icon{};icon.cbSize=sizeof(icon);icon.hWnd=hwnd;icon.uID=1;RECT icon_rect{};
+    NOTIFYICONIDENTIFIER icon{};icon.cbSize=sizeof(icon);icon.hWnd=hwnd;icon.uID=1;icon.guidItem=overlay::instance_identity().icon;RECT icon_rect{};
     check(SUCCEEDED(Shell_NotifyIconGetRect(&icon,&icon_rect)),"recovery tray icon registered");
     action(hwnd,overlay::command::edit);
     check(!(GetWindowLongPtrW(hwnd,GWL_EXSTYLE)&WS_EX_TRANSPARENT),"edit mode interactive");
@@ -250,31 +272,44 @@ int wmain(int argc,wchar_t** argv) {
     action(hwnd,overlay::command::reset);
     // Recreate the same lost-icon state that Explorer restart produces, without
     // terminating the user's Explorer or touching other applications' icons.
-    NOTIFYICONDATAW removed{};removed.cbSize=sizeof(removed);removed.hWnd=hwnd;removed.uID=1;
+    NOTIFYICONDATAW removed{};removed.cbSize=sizeof(removed);removed.hWnd=hwnd;removed.uID=1;removed.uFlags=NIF_GUID;removed.guidItem=icon.guidItem;
     check(Shell_NotifyIconW(NIM_DELETE,&removed)!=FALSE,"remove only test overlay tray icon");
     SendMessageW(hwnd,RegisterWindowMessageW(L"TaskbarCreated"),0,0);pump(100);
     icon.hWnd=hwnd;
     check(SUCCEEDED(Shell_NotifyIconGetRect(&icon,&icon_rect)),"tray icon is re-added after Shell recovery notification");
     // Exercise the real Shell callback and popup, not just WM_COMMAND handlers.
-    const POINT tray_point{(icon_rect.left+icon_rect.right)/2,(icon_rect.top+icon_rect.bottom)/2};
+    if(open_notification_overflow()) {pump(200);Shell_NotifyIconGetRect(&icon,&icon_rect);}
+    POINT tray_point{(icon_rect.left+icon_rect.right)/2,(icon_rect.top+icon_rect.bottom)/2};
     RECT virtual_screen{GetSystemMetrics(SM_XVIRTUALSCREEN),GetSystemMetrics(SM_YVIRTUALSCREEN),
         GetSystemMetrics(SM_XVIRTUALSCREEN)+GetSystemMetrics(SM_CXVIRTUALSCREEN),
         GetSystemMetrics(SM_YVIRTUALSCREEN)+GetSystemMetrics(SM_CYVIRTUALSCREEN)};
     if(PtInRect(&virtual_screen,tray_point) && WindowFromPoint(tray_point)) {
         auto choose=[&](int index) {
+            key(VK_ESCAPE);key(VK_ESCAPE,true);pump(60);
+            key(VK_ESCAPE);key(VK_ESCAPE,true);pump(60);
+            if(open_notification_overflow()) pump(150);
+            Shell_NotifyIconGetRect(&icon,&icon_rect);tray_point={(icon_rect.left+icon_rect.right)/2,(icon_rect.top+icon_rect.bottom)/2};
             pointer(tray_point,MOUSEEVENTF_RIGHTDOWN);pointer(tray_point,MOUSEEVENTF_RIGHTUP);pump(150);
             GUITHREADINFO gui{};gui.cbSize=sizeof(gui);GetGUIThreadInfo(GetWindowThreadProcessId(hwnd,nullptr),&gui);
             if(gui.hwndMenuOwner!=hwnd) { key(VK_ESCAPE);key(VK_ESCAPE,true);pump(50);return false; }
-            key(VK_HOME);key(VK_HOME,true);
-            for(int i=0;i<index;++i) { key(VK_DOWN);key(VK_DOWN,true); }
-            key(VK_RETURN);key(VK_RETURN,true);pump(100);return true;
+            check(own_popup_menu(hwnd)!=nullptr,"actual tray right-click opens application context menu");
+            screenshot(own_popup_menu(hwnd),profile/L"tray-menu.bmp");
+            const auto invoked=invoke_popup_item(hwnd,index==3?L"Lock Overlay":L"Edit Overlay");pump(150);return invoked;
         };
-        if(choose(1)) {
+        if(choose(3)) {
             check((GetWindowLongPtrW(hwnd,GWL_EXSTYLE)&WS_EX_TRANSPARENT)!=0,"real tray popup Lock command activates click-through");
-            check(choose(0),"reopen real tray popup");
+            check(choose(2),"reopen real tray popup");
             check(!(GetWindowLongPtrW(hwnd,GWL_EXSTYLE)&WS_EX_TRANSPARENT),"real tray popup Edit command activates selection");
         } else std::cout<<"NOT EXERCISED: tray icon is in a hidden/overflow area; popup requires manual opening\n";
     } else std::cout<<"NOT EXERCISED: tray icon has no visible desktop rectangle\n";
+    key(VK_ESCAPE);key(VK_ESCAPE,true);pump(60);key(VK_ESCAPE);key(VK_ESCAPE,true);pump(60);
+    if(open_notification_overflow()) pump(150);
+    Shell_NotifyIconGetRect(&icon,&icon_rect);tray_point={(icon_rect.left+icon_rect.right)/2,(icon_rect.top+icon_rect.bottom)/2};
+    pointer(tray_point,MOUSEEVENTF_LEFTDOWN);pointer(tray_point,MOUSEEVENTF_LEFTUP);pump(std::max(10u,GetDoubleClickTime()/6));
+    pointer(tray_point,MOUSEEVENTF_LEFTDOWN);pointer(tray_point,MOUSEEVENTF_LEFTUP);pump(250);
+    auto tray_settings=GetLastActivePopup(hwnd);wchar_t tray_class[64]{};GetClassNameW(tray_settings,tray_class,64);
+    check(std::wstring(tray_class)==L"InputOverlaySettings","actual tray double-click opens Settings");
+    SendMessageW(tray_settings,WM_CLOSE,0,0);pump(80);check(IsWindowVisible(hwnd),"closing tray Settings leaves HUD visible");
     std::vector<HMONITOR> monitors;
     EnumDisplayMonitors(nullptr,nullptr,[](HMONITOR m,HDC,LPRECT,LPARAM data)->BOOL {
         reinterpret_cast<std::vector<HMONITOR>*>(data)->push_back(m);return TRUE;

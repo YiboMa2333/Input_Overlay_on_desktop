@@ -185,7 +185,8 @@ void SettingsDialog::show(HWND owner,const Settings& settings,std::function<bool
     draft_=settings;apply_=std::move(callback);selected_key_=0;page_=0;reset_=false;
     INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_TAB_CLASSES|ICC_STANDARD_CLASSES};InitCommonControlsEx(&controls);
     WNDCLASSW c{};c.lpfnWndProc=procedure;c.hInstance=GetModuleHandleW(nullptr);c.lpszClassName=L"InputOverlaySettings";
-    c.hCursor=LoadCursorW(nullptr,IDC_ARROW);c.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_BTNFACE+1);RegisterClassW(&c);
+    c.hCursor=LoadCursorW(nullptr,IDC_ARROW);c.hIcon=LoadIconW(c.hInstance,MAKEINTRESOURCEW(101));
+    c.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_BTNFACE+1);RegisterClassW(&c);
     const auto dpi=GetDpiForWindow(owner);RECT rect{0,0,MulDiv(600,dpi,96),MulDiv(520,dpi,96)};
     const DWORD style=WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU;AdjustWindowRectExForDpi(&rect,style,FALSE,WS_EX_CONTROLPARENT,dpi);
     MONITORINFO monitor{};monitor.cbSize=sizeof(monitor);GetMonitorInfoW(MonitorFromWindow(owner,MONITOR_DEFAULTTONEAREST),&monitor);

@@ -1,14 +1,52 @@
-# Input Overlay on Desktop
+<p align="center">
+  <img src="resources/app-icon.png" width="112" height="112" alt="Input Overlay Desktop app icon">
+</p>
+<h1 align="center">Input Overlay Desktop</h1>
+<p align="center"><strong>Your inputs. On your desktop.</strong><br>Compact keyboard + mouse HUD for Windows, without OBS.</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-Windows_10_%2F_11-0078D4" alt="Windows 10 / 11">
+  <img src="https://img.shields.io/badge/native-C%2B%2B20-00599C" alt="C++20">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--2.0--only-D8CF45" alt="GPL-2.0-only"></a>
+</p>
 
-A standalone Windows desktop adaptation of [univrsal/input-overlay](https://github.com/univrsal/input-overlay).
-This scaffold uses C++20, CMake, Win32 Raw Input, Direct2D and DirectWrite. OBS Studio
-is neither needed nor linked. It is an early prototype, not a feature-complete port.
+<p align="center"><a href="#installation">Install</a> &middot; <a href="#settings-and-usage">Customize</a> &middot; <a href="docs/TRAY_RELEASE.md">Test status</a> &middot; <a href="docs/LICENSING.md">Licensing</a></p>
 
-The compact vector HUD highlights physical Q/W/E, Shift/A/S/D, Ctrl and Space
-keys, left/right/middle mouse regions and brief directional scroll indicators.
-X1/X2 and cursor position remain in the input model but are not drawn. Raw Input continues to arrive
-while another normal desktop application has focus. Input is processed in memory;
-there is no input log, network listener or telemetry. Close the window to stop capture.
+![Compact keyboard and mouse HUD in Edit mode](docs/screenshots/edit-mode.png)
+
+A native desktop adaptation of [univrsal/input-overlay](https://github.com/univrsal/input-overlay), built with C++20, Win32 Raw Input, Direct2D and DirectWrite. This is an independent project under development.
+
+- **Live input:** Q/W/E, Shift/A/S/D, Ctrl, Space, three mouse buttons and directional wheel indicators.
+- **Desktop friendly:** transparent, click-through Locked mode; one-group moving and resizing in Edit mode.
+- **Make it yours:** colors, fonts, opacity, layouts, scale and shortcuts in native Settings.
+- **Tray first:** Settings, show/hide, startup and Exit without a console window.
+- **Private by design:** current input state stays in memory; no typed-text recording, input history or telemetry.
+
+## Installation
+
+> **Release status:** public binary downloads are on hold while the exact compiler-runtime licence review is completed. Local review ZIPs are not approved releases. Build from source today; do not download binaries from untrusted mirrors. [Review checklist](docs/RELEASE_REVIEW.md).
+
+### Portable setup: when an approved release is available
+
+1. Open the repository's [Releases page](https://github.com/YiboMa2333/Input_Overlay_on_desktop/releases) and choose an approved **Windows x64 portable ZIP**. A published release is not currently promised.
+2. Extract the entire ZIP into a permanent folder, such as `%LOCALAPPDATA%\Programs\InputOverlayDesktop`. Do not run it from inside the ZIP.
+3. Double-click **InputOverlayDesktop.exe**. No OBS, Python, development environment, service or administrator installation is required at runtime.
+4. Find the app icon in the notification area; check **Show hidden icons** if necessary. Double-click it to open **Settings**.
+5. Choose **Edit Overlay** or press **Ctrl+Alt+F8**, move and resize your HUD, then choose **Lock Overlay** to restore click-through.
+
+Keep the included licences, notices and corresponding-source archive with the application. Windows 10 version 1703 or newer / Windows 11 on x64 is the intended platform. Local GUI validation used Windows 11 at 150% display scaling; see the [test limitations](docs/TRAY_RELEASE.md).
+
+### Start with Windows, update and uninstall
+
+| Task | What to do |
+| --- | --- |
+| Start automatically | Enable **Start with Windows** in the tray menu, or enable it in Settings and Apply. Disabled by default; applies only to your Windows user. |
+| Save preferences | Use **Apply** in Settings. Configuration is stored in `%LOCALAPPDATA%\InputOverlayDesktop\settings.ini`. |
+| Recover a hidden HUD | Choose **Show Overlay**, then **Reset Position and Size** if needed. |
+| Update | Exit from the tray, back up your settings, and replace the extracted application folder with the approved new package. Keep the same executable path if startup is enabled. |
+| Move the application | Disable startup before moving it; re-enable startup at the new path. |
+| Uninstall | Disable startup, choose **Exit**, then delete the extracted folder. Optionally remove the application's configuration folder. |
+
+The executable is unsigned. Signing/SmartScreen approval is not provided. If launch fails, extract the whole package again and check the [installation and troubleshooting notes](docs/INSTALL.md). Closing Settings keeps the overlay running; **Exit** in the tray menu quits it completely.
 
 ## Build on Windows
 
@@ -20,7 +58,7 @@ OBS SDK, submodules or network downloads are required by CMake.
 ```powershell
 git clone https://github.com/YiboMa2333/Input_Overlay_on_desktop.git
 cd Input_Overlay_on_desktop
-# For this scaffold, use the development branch once published:
+# Use the standalone application development branch:
 git switch develop/standalone-win32
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
@@ -72,8 +110,7 @@ ctest --test-dir build -C Release --output-on-failure
 
 Use `-B build/llvm` for the portable build. See [validation details](docs/VALIDATION.md).
 
-If working from the local checkout created during development, start directly
-at the CMake commands. This branch is currently local; it has not been pushed.
+If working from an existing checkout, start directly at the CMake commands.
 
 Optional staging (not a source-compliant release archive by itself):
 
@@ -103,13 +140,13 @@ again from the tray or shortcut to remove all selection controls and pass clicks
 through. Edit mode may take focus when clicked so drag capture works reliably;
 locking restores the prior foreground application when it remains available.
 
-The tray menu provides **Edit Overlay**, **Lock Overlay**, **Reset Position**,
-**Settings**, and **Exit**. Reset returns the HUD to the primary work area at
+The tray menu provides **Edit Overlay**, **Lock Overlay**, **Reset Position and Size**,
+**Open Settings**, **Show/Hide Overlay**, **Start with Windows**, and **Exit**. Reset returns the HUD to the primary work area at
 its default size; it works even when the overlay is offscreen or locked. Explorer
 restart is handled by recreating the tray icon. Startup fails visibly if the
 recovery tray icon cannot be registered.
 
-Open **Settings > Customize overlay** for native Appearance, Layout and Behavior
+Double-click the tray icon or choose **Open Settings** for native Appearance, Layout and Behavior
 tabs: color/font pickers, opacity, thickness, scale, spacing, per-key positioning
 and visibility, three presets, mouse visibility, topmost, startup, launch-to-tray
 and shortcut controls. Apply saves changes. See [customization and packaging](docs/CUSTOMIZATION.md)
@@ -201,6 +238,10 @@ relicense the GPL adaptation. This is an independent adaptation, not an official
 upstream release.
 
 ## Validation and remaining work
+
+See [tray and portable verification](docs/TRAY_RELEASE.md) for notification-area
+controls, single-instance behavior, the actual Explorer-restart result and the
+remaining manual tray check.
 
 The Release application was built and launched on Windows using portable
 LLVM-MinGW/CMake. State, placement, settings and real desktop integration tests
