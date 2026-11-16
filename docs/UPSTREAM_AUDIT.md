@@ -47,10 +47,20 @@ https://github.com/univrsal/input-overlay/tree/7d97ae9e66d9e4dd968f759fcafd44796
 | Presets | `presets/xbox-controller/README.md` states CC0; `gamecube/CREDITS.md` credits borrowed m-overlay textures; `inphic/README.md` describes vendor images and permission correspondence | No asset imported. One preset's CC0 label does not clear the entire collection; audit each asset's origin/licence and redistribution rights before reuse |
 
 The standalone target links only Windows system/SDK libraries (`user32`, `gdi32`,
-`d2d1`, `dwrite`, `wtsapi32`) and the compiler C++ runtime. Windows SDK and runtime use and
+`d2d1`, `dwrite`, `wtsapi32`, `shell32`) and the compiler C++ runtime. Windows SDK and runtime use and
 redistribution follow Microsoft's applicable terms; no Microsoft SDK binaries or
 font files are copied into this repository. Segoe UI is requested as an installed
 system font. There are no bundled third-party dependency binaries or assets.
 
 The inspection checkout and previously downloaded plugin/presets live outside
 this repository and are not build inputs or distribution contents.
+
+The local test build uses portable LLVM-MinGW 20261104 and its statically linked
+compiler runtime rather than MSVC. The toolchain's Apache-2.0-with-LLVM-exceptions
+text is retained in `LICENSES/LLVM-exception.txt`; the LLVM exception specifically
+addresses embedded object code and GPLv2 combinations. The application remains
+GPL-2.0-only. This does not grant permission to ignore other runtime components'
+individual notices: audit the exact MinGW-w64 runtime notices before a public
+LLVM-built binary release. The source repository contains no toolchain binaries
+or packaged binary release. `com_ptr.hpp` is a small newly written owning wrapper,
+replacing the optional Microsoft WRL header for toolchain portability.

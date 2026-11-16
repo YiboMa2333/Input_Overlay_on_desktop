@@ -3,7 +3,15 @@
 #include <windows.h>
 #include <algorithm>
 #include <filesystem>
+#include <cwchar>
+#include <cerrno>
 namespace overlay {
+bool Settings::valid_hotkey(unsigned modifiers, unsigned vk) {
+    // Require at least two Ctrl/Alt/Shift modifiers and a function key. Avoid
+    // tracked gaming keys, Windows-reserved combinations, F12 and bare keys.
+    return (modifiers == 3 || modifiers == 5 || modifiers == 6 || modifiers == 7)
+        && vk >= VK_F1 && vk <= VK_F11;
+}
 Settings Settings::load() {
     Settings result;
     wchar_t path[32768]{};
@@ -12,20 +20,38 @@ Settings Settings::load() {
     auto directory = std::filesystem::path(path) / L"InputOverlayDesktop";
     std::error_code error;
     std::filesystem::create_directories(directory, error);
-    if (error) return result; // Defaults remain usable if settings cannot be written.
+    if (error) return result;
     result.file = (directory / L"settings.ini").wstring();
-    auto read = [&](const wchar_t* name, int fallback) {
-        return static_cast<int>(GetPrivateProfileIntW(L"window", name, fallback, result.file.c_str()));
+    auto read = [&](const wchar_t* name, int fallback, int low, int high) {
+        wchar_t value[64]{};
+        if (!GetPrivateProfileStringW(L"window", name, L"", value, 64, result.file.c_str())) return fallback;
+        wchar_t* end{}; errno = 0;
+        const auto number = std::wcstoll(value, &end, 10);
+        if (errno || end == value || *end || number < low || number > high) return fallback;
+        return static_cast<int>(number);
     };
-    result.x = read(L"x", result.x); result.y = read(L"y", result.y);
-    result.width = std::clamp(read(L"width", result.width), 254, 1352);
-    result.height = std::clamp(read(L"height", result.height), 111, 592);
-    result.topmost = read(L"topmost", 1) != 0;
+    result.x = read(L"x", 60, -1000000, 1000000);
+    result.y = read(L"y", 60, -1000000, 1000000);
+    result.width = read(L"width", 338, 169, 2028);
+    result.height = read(L"height", 148, 74, 888);
+    result.edit = read(L"edit", 0, 0, 1) != 0;
+    result.aspect_lock = read(L"aspect_lock", 1, 0, 1) != 0;
+    result.hotkey_enabled = read(L"hotkey_enabled", 1, 0, 1) != 0;
+    result.hotkey_modifiers = read(L"hotkey_modifiers", 3, 0, 7);
+    result.hotkey_vk = read(L"hotkey_vk", 119, 0, 255);
+    // Invalid requested shortcuts are disabled, never silently substituted.
+    if (!valid_hotkey(result.hotkey_modifiers, result.hotkey_vk)) result.hotkey_enabled = false;
     return result;
 }
-void Settings::save_position(int new_x, int new_y) const {
-    if (file.empty()) return;
-    WritePrivateProfileStringW(L"window", L"x", std::to_wstring(new_x).c_str(), file.c_str());
-    WritePrivateProfileStringW(L"window", L"y", std::to_wstring(new_y).c_str(), file.c_str());
+bool Settings::save() const {
+    if (file.empty()) return false;
+    bool ok = true;
+    auto write = [&](const wchar_t* key, int value) {
+        if (!WritePrivateProfileStringW(L"window", key, std::to_wstring(value).c_str(), file.c_str())) ok = false;
+    };
+    write(L"x", x); write(L"y", y); write(L"width", width); write(L"height", height);
+    write(L"edit", edit); write(L"aspect_lock", aspect_lock);
+    write(L"hotkey_enabled", hotkey_enabled); write(L"hotkey_modifiers", hotkey_modifiers); write(L"hotkey_vk", hotkey_vk);
+    return ok;
 }
 }

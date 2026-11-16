@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "renderer.hpp"
 #include "hud_layout.hpp"
+#include "desktop/geometry.hpp"
 #include <cwchar>
 namespace overlay {
 namespace {
-using Microsoft::WRL::ComPtr;
 const auto ink = D2D1::ColorF(0xF2F0E7);
 const auto yellow = D2D1::ColorF(0xD8CF45);
 const auto dark = D2D1::ColorF(0x101317, 0.74f);
@@ -24,7 +24,7 @@ HRESULT Renderer::initialize() {
     hr = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
         reinterpret_cast<IUnknown**>(text_factory_.GetAddressOf()));
     if (FAILED(hr)) return hr;
-    hr = text_factory_->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMIBOLD,
+    hr = text_factory_->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
         DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 13.0f, L"en-us", format_.GetAddressOf());
     if (FAILED(hr)) return hr;
     format_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
@@ -88,17 +88,21 @@ HRESULT Renderer::surface(UINT width, UINT height) {
 void Renderer::resize(UINT width, UINT height) {
     if (width && height && (width != width_ || height != height_)) release_surface();
 }
-HRESULT Renderer::draw(HWND window, const InputState& state) {
+HRESULT Renderer::draw(HWND window, const InputState& state, bool editing, bool resizing) {
     RECT bounds{}; GetClientRect(window, &bounds);
     if (bounds.right <= 0 || bounds.bottom <= 0) return S_OK;
     auto hr = surface(bounds.right, bounds.bottom);
     if (FAILED(hr)) return hr;
-    const auto fit = hud::fit(static_cast<float>(width_), static_cast<float>(height_));
     target_->BeginDraw();
     target_->SetTransform(D2D1::Matrix3x2F::Identity());
     target_->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
-    target_->SetTransform(D2D1::Matrix3x2F::Scale(fit.scale, fit.scale)
-        * D2D1::Matrix3x2F::Translation(fit.x, fit.y));
+    if (editing) {
+        // Nonzero alpha makes the entire edit rectangle receive mouse messages,
+        // including gaps. Locked mode never draws this catch surface.
+        brush_->SetColor(D2D1::ColorF(0, 0, 0, 1.0f/255));
+        target_->FillRectangle(D2D1::RectF(0, 0, static_cast<float>(width_), static_cast<float>(height_)), brush_.Get());
+    }
+    target_->SetTransform(D2D1::Matrix3x2F::Scale(width_/hud::width, height_/hud::height));
     auto rounded = [&](D2D1_ROUNDED_RECT shape, bool pressed) {
         brush_->SetColor(pressed ? yellow : dark);
         target_->FillRoundedRectangle(shape, brush_.Get());
@@ -142,6 +146,32 @@ HRESULT Renderer::draw(HWND window, const InputState& state) {
         brush_->SetColor(yellow);
         target_->DrawLine({272, y}, {278, tip}, brush_.Get(), 2);
         target_->DrawLine({278, tip}, {284, y}, brush_.Get(), 2);
+    }
+    if (editing) {
+        target_->SetTransform(D2D1::Matrix3x2F::Identity());
+        const float dpi = GetDpiForWindow(window)/96.0f;
+        const float inset = 4*dpi;
+        const auto boundary = D2D1::RectF(inset, inset, width_-inset, height_-inset);
+        brush_->SetColor(edge); target_->DrawRectangle(boundary, brush_.Get(), 3*dpi);
+        brush_->SetColor(D2D1::ColorF(0x83B9FF)); target_->DrawRectangle(boundary, brush_.Get(), dpi);
+        for (const auto center : placement::handles(width_, height_, inset)) {
+            const auto rect = D2D1::RectF(static_cast<float>(center.x)-inset, static_cast<float>(center.y)-inset,
+                static_cast<float>(center.x)+inset, static_cast<float>(center.y)+inset);
+            brush_->SetColor(ink); target_->FillRectangle(rect, brush_.Get());
+            brush_->SetColor(D2D1::ColorF(0x2965B0)); target_->DrawRectangle(rect, brush_.Get(), dpi);
+        }
+        if (resizing) {
+            const auto label = std::to_wstring(MulDiv(width_, 96, GetDpiForWindow(window))) + L" x "
+                + std::to_wstring(MulDiv(height_, 96, GetDpiForWindow(window))) + L" DIP";
+            const float cx = width_/2.0f, cy = height_/2.0f;
+            const auto rect = D2D1::RectF(cx-65*dpi, cy-12*dpi, cx+65*dpi, cy+12*dpi);
+            brush_->SetColor(D2D1::ColorF(0x101317, 0.95f)); target_->FillRectangle(rect, brush_.Get());
+            // The format stays in DIP; scale the badge together with the monitor.
+            target_->SetTransform(D2D1::Matrix3x2F::Scale(dpi, dpi));
+            brush_->SetColor(ink);
+            target_->DrawText(label.c_str(), static_cast<UINT32>(label.size()), format_.Get(),
+                D2D1::RectF(cx/dpi-65, cy/dpi-12, cx/dpi+65, cy/dpi+12), brush_.Get());
+        }
     }
     hr = target_->EndDraw();
     if (hr == D2DERR_RECREATE_TARGET) { release_surface(); return S_OK; }

@@ -27,10 +27,10 @@ cmake --build build --config Release
 .\build\Release\InputOverlayDesktop.exe
 ```
 
-Run the deterministic input-state tests (no third-party test framework):
+Run the automated state, geometry and settings tests (no third-party test framework):
 
 ```powershell
-cmake --build build --config Release --target input_state_tests
+cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
 
@@ -42,6 +42,34 @@ cmake -S . -B build/state -DOVERLAY_BUILD_APP=OFF -DBUILD_TESTING=ON
 cmake --build build/state --config Release
 ctest --test-dir build/state -C Release --output-on-failure
 ```
+
+The native build and tests have also been run using portable
+[LLVM-MinGW 20261104](https://github.com/mstorsjo/llvm-mingw/releases/tag/20261104)
+(Clang 23.1.5) and CMake 4.5.0. With those tools extracted and CMake on PATH:
+
+```powershell
+$llvm = "C:/tools/llvm-mingw-20261104-ucrt-x86_64"
+$env:PATH = "$llvm/bin;" + $env:PATH
+cmake -S . -B build/llvm -G "MinGW Makefiles" `
+  "-DCMAKE_CXX_COMPILER=$llvm/bin/clang++.exe" `
+  "-DCMAKE_MAKE_PROGRAM=$llvm/bin/mingw32-make.exe" `
+  -DCMAKE_BUILD_TYPE=Release "-DCMAKE_EXE_LINKER_FLAGS=-static"
+cmake --build build/llvm -j 4
+ctest --test-dir build/llvm --output-on-failure
+.\build\llvm\InputOverlayDesktop.exe
+```
+
+Interactive desktop tests are opt-in: they open a temporary test backdrop and
+move/click the pointer. They use an isolated settings directory and restart only
+their own child application. Run while you are not interacting with the desktop:
+
+```powershell
+cmake -S . -B build -DOVERLAY_ENABLE_DESKTOP_TESTS=ON
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
+```
+
+Use `-B build/llvm` for the portable build. See [validation details](docs/VALIDATION.md).
 
 If working from the local checkout created during development, start directly
 at the CMake commands. This branch is currently local; it has not been pushed.
@@ -57,21 +85,38 @@ as described in [the licensing notes](docs/LICENSING.md).
 
 ## Settings and usage
 
-Drag a visible key or the mouse body to move the borderless HUD. Right-click a
-visible element and select **Close overlay** to exit. The window is always on
-top by default and does not activate on ordinary clicks or input events. It has
-no title bar or large background panel. Empty areas between elements are fully
-transparent and pass clicks to windows beneath; the visible shapes remain
-interactive for moving and closing the HUD.
+The HUD starts **Locked**: always on top of ordinary windows, transparent, fully
+click-through (including visible key/mouse shapes), with no editing controls and
+no keyboard focus activation from ordinary clicks. Visualization remains active.
+
+Use the system tray menu **Edit Overlay** or **Ctrl+Alt+F8** to edit. A selection
+rectangle with eight handles surrounds the entire keyboard/mouse group. Drag
+anywhere inside to move it. Drag a corner to resize proportionally; labels,
+spacing, outlines and the mouse all scale together. Handles show directional
+cursors and resizing displays logical width/height. Escape cancels a drag.
+
+Aspect ratio is locked to the original HUD by default. Uncheck **Settings > Lock
+aspect ratio** for single-axis edge resizing; corner resizing still preserves
+the current proportions. Hold Shift to force the original aspect ratio. Lock
+again from the tray or shortcut to remove all selection controls and pass clicks
+through. Edit mode may take focus when clicked so drag capture works reliably;
+locking restores the prior foreground application when it remains available.
+
+The tray menu provides **Edit Overlay**, **Lock Overlay**, **Reset Position**,
+**Settings**, and **Exit**. Reset returns the HUD to the primary work area at
+its default size; it works even when the overlay is offscreen or locked. Explorer
+restart is handled by recreating the tray icon. Startup fails visibly if the
+recovery tray icon cannot be registered.
 
 Keys use thin off-white outlines, dark translucent fills and a warm yellow
 `#D8CF45` pressed state. The mouse uses matching vector outlines. Dark edging
 keeps white strokes visible on light desktops. All highlights read live state.
 See [HUD rendering notes and previews](docs/HUD_DESIGN.md).
 
-Window position is saved on close in
-`%LOCALAPPDATA%\InputOverlayDesktop\settings.ini`. To change the defaults, create
-or edit the file while the app is closed:
+Position, logical size and mode are saved after completed edits, mode changes,
+recovery and shutdown to `%LOCALAPPDATA%\InputOverlayDesktop\settings.ini`.
+Use **Settings > Open configuration** and then **Reload configuration** after
+saving, or edit while the app is closed:
 
 ```ini
 [window]
@@ -79,16 +124,36 @@ x=60
 y=60
 width=338
 height=148
-topmost=1
+edit=0
+aspect_lock=1
+hotkey_enabled=1
+hotkey_modifiers=3
+hotkey_vk=119
 ```
 
-Width is clamped to 254–1352 and height to 111–592 logical pixels at 96 DPI.
-The HUD preserves its aspect ratio inside that canvas, leaving any extra space
-transparent. For 150% custom HUD size, use width=507 and height=222. Windows DPI
-scaling is applied in addition; moving between monitors follows `WM_DPICHANGED`.
-Existing INI sizes are respected: reset width/height to the example for the new
-compact appearance. An entirely off-screen saved position falls back to (60,60).
-If settings cannot be saved, defaults still work. No administrator rights are
+Width accepts 169–2028 and height 74–888 logical pixels at 96 DPI. Invalid values
+fall back to defaults. Screen x/y are signed physical coordinates, so monitors
+left/above the primary are supported. For 150% custom HUD size use width=507,
+height=222; Windows DPI scaling is applied in addition. Unlocked edge resizing
+uses nonuniform vector scaling. The legacy `topmost` setting is ignored: both
+modes stay above ordinary desktop windows.
+
+The default shortcut uses modifier bitmask 3 (Ctrl=2, Alt=1, Shift=4) and key 119
+(F8). Configuration accepts F1 through F11 with at least two Ctrl/Alt/Shift
+modifiers; no bare gaming keys, Windows combinations or F12. Set
+`hotkey_enabled=0` to disable it. Registration uses `MOD_NOREPEAT`; on conflict
+the existing owner is retained, the tray reports shortcut unavailable, and tray
+controls remain usable. A global shortcut reserves its configured combination;
+choose another if your game/application uses it.
+
+Partially offscreen positions are allowed while a useful portion remains
+reachable. Restore and display/work-area changes validate against current monitor
+work areas; inaccessible placements move onto the nearest available screen and
+oversize geometry is reduced to fit. Reset Position is always available from the
+tray. Mixed-DPI transitions end the current drag before applying the recommended
+scaled bounds; start a new drag to continue on the new monitor.
+
+Configuration write failures are reported in the tray tooltip/menu. No administrator rights are
 required for ordinary desktop capture. Secure desktop, other sessions and
 exclusive-input applications have not been validated.
 
@@ -101,6 +166,7 @@ exclusive-input applications have not been validated.
 | `src/render/renderer.*`, `hud_layout.hpp` | Vector HUD geometry, DirectWrite labels, alpha surface and visual state |
 | `src/settings/settings.*` | Validated INI settings and position persistence |
 | `src/desktop/window.*` | HWND lifecycle, message loop, topmost policy and refresh timer |
+| `src/desktop/geometry.hpp` | Handle hit testing, anchored resizing and monitor recovery without Win32 dependencies |
 | `src/main.cpp` | DPI setup and application entry point |
 
 All state mutation and drawing happen on the window thread; capture does not call
@@ -127,17 +193,18 @@ upstream release.
 
 ## Validation and remaining work
 
-No successful configure, compile or GUI launch has been performed in the current
-development environment: CMake and a usable MSVC/Windows SDK were not found.
-The launch acceptance criterion remains unverified. Follow
-[VALIDATION.md](docs/VALIDATION.md) on a Windows development machine.
+The Release application was built and launched on Windows using portable
+LLVM-MinGW/CMake. State, placement, settings and real desktop integration tests
+passed, including cross-process click-through, drag/resize, restart persistence,
+hotkeys and recovery notifications. See [VALIDATION.md](docs/VALIDATION.md) for
+the exact scope, tool versions and remaining hardware checks.
 
-Remaining work includes a full click-through mode with a recovery
-control, tray UI, configurable layouts, upstream preset
-conversion with asset clearance and gamepad support. Automated state tests are
-included but have not yet been executed in this environment. Very fast
+Remaining work includes configurable layouts, upstream preset
+conversion with asset clearance and gamepad support. Physical monitor unplugging,
+mixed-DPI monitor transitions, exclusive full-screen games and MSVC compilation
+still require separate validation. Very fast
 press/release pairs between paints may not be visible.
 Horizontal wheel input is not implemented. Devices already held when capture
 starts are not seeded into state. A device disconnect while held can leave stale
 state if Windows fails to report both device removal and a usable asynchronous
-release state. Settings write failures are currently silent.
+release state.

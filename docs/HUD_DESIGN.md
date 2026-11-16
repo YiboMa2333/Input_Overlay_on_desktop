@@ -35,18 +35,22 @@ the HUD vectors/text, then presents through `UpdateLayeredWindow` with
 texture or opaque HWND render-target clear. The GDI bitmap, selected object and
 memory DC are released with the target on size changes and destruction.
 
-The target uses 96 DPI drawing coordinates and a uniform physical-pixel transform
-from `hud::fit`; labels and curves scale with geometry without stretching. The
+The target uses 96 DPI drawing coordinates and a physical-pixel transform over
+the entire HUD. Corner/aspect-locked resizing keeps uniform proportions; unlocked
+edge resizing permits nonuniform X/Y scaling of all labels, curves and spacing. The
 process requests Per Monitor V2 awareness before creating windows. Initial size
 uses `GetDpiForWindow`; `WM_DPICHANGED` applies the recommended bounds, invalidates
 the surface and redraws. Settings dimensions are logical units. DirectWrite uses
 grayscale antialiasing for alpha composition, avoiding ClearType color fringes.
 
-The HWND is a layered, non-activating popup/tool window, topmost by default.
-Fully transparent pixels pass through to the desktop. Hit testing treats visible
-keys and mouse as draggable caption regions and explicit gaps as transparent.
-Right-clicking an element opens a close menu. This provides controls without a
-title bar; full click-through of visible shapes is intentionally not enabled.
+The HWND is a layered popup/tool window, always topmost over ordinary windows.
+Locked mode adds `WS_EX_TRANSPARENT` and `WS_EX_NOACTIVATE`, returns transparent
+hit tests and does not activate on mouse clicks. Actual cross-process click-through
+and foreground focus have been tested, rather than inferred from styles.
+Edit mode removes those flags and draws a nearly transparent alpha catch surface
+so empty areas inside the selected group receive mouse input. Physical-pixel
+selection chrome draws after the HUD transform, keeping eight handles usable at
+each DPI. See [placement behavior](PLACEMENT.md).
 
 ## Design previews (not native screenshots)
 
@@ -59,10 +63,10 @@ tool reads key rectangles from the production header and mirrors mouse paths;
 the SVGs are not runtime assets and are not evidence that Windows rendering works.
 SVG text rasterization can differ from DirectWrite.
 
-The generator ran successfully and parsed both SVGs as XML. Native application
-screenshots could not be captured because no Windows executable can be built in
-the current environment. C++ tests, Direct2D composition, DPI transitions and
-desktop hit-testing remain unexecuted. See the visual checks in `VALIDATION.md`.
+The generator ran successfully and parsed both SVGs as XML. A portable Windows
+toolchain is now available; the native application has been built, run and tested.
+Native screenshots of the editing and locked modes are linked in `PLACEMENT.md`.
+Physical mixed-DPI monitor transitions remain a manual check. See `VALIDATION.md`.
 
 Implementation references: [Direct2D alpha formats](https://learn.microsoft.com/en-us/windows/win32/direct2d/supported-pixel-formats-and-alpha-modes),
 [layered-window composition](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-updatelayeredwindow),

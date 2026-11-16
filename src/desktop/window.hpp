@@ -3,19 +3,36 @@
 #include "input/raw_input.hpp"
 #include "render/renderer.hpp"
 #include "settings/settings.hpp"
+#include "geometry.hpp"
+#include <shellapi.h>
 namespace overlay {
 class Window {
     HWND handle_{};
+    HWND previous_foreground_{};
     InputState state_;
     RawInput capture_;
     Renderer renderer_;
     Settings settings_;
-    bool attached_{};
-    bool session_notifications_{};
-    bool suspended_{};
-    bool locked_{}, disconnected_{}, sleeping_{};
+    bool attached_{}, session_notifications_{}, suspended_{};
+    bool session_locked_{}, disconnected_{}, sleeping_{};
+    bool tray_added_{}, hotkey_registered_{}, save_failed_{};
+    UINT taskbar_created_{};
+    ULONGLONG next_tray_retry_{};
+    placement::Handle dragging_ = placement::Handle::None;
+    placement::Rect drag_start_{};
+    POINT drag_origin_{};
     void suspend_capture();
     void resume_capture();
+    void mode(bool edit);
+    void persist();
+    void recover(bool reset = false);
+    void apply(placement::Rect rect);
+    placement::Rect bounds() const;
+    void end_drag(bool cancel = false);
+    void menu();
+    void command(unsigned id);
+    bool tray(bool add);
+    void hotkey();
     static LRESULT CALLBACK procedure(HWND, UINT, WPARAM, LPARAM);
     LRESULT message(UINT, WPARAM, LPARAM);
 public:
