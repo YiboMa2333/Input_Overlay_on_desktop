@@ -1,0 +1,57 @@
+{
+  "toolchain": "LLVM-MinGW 20261104 UCRT x86_64",
+  "clang": "23.1.5",
+  "llvm_commit": "392dfff97d29b59d77e5cac6d4b6ef2585fe7117",
+  "mingw_commit": "ee9bd87644156c41072a11ad957d1e11831a72df",
+  "toolchain_archive_sha256": "552191b5754c49a5a20723276a6fc56541ea1922c4c50b7b669022333fc1b40f",
+  "source_archives": [
+    {
+      "name": "llvm",
+      "url": "https://codeload.github.com/llvm/llvm-project/tar.gz/392dfff97d29b59d77e5cac6d4b6ef2585fe7117",
+      "sha256": "d6dd769a5c981bc0ec5d877e55ca141e826aca1bca5c5e7d6128e70341dd3ae0",
+      "include": [
+        "LICENSE.TXT",
+        "libcxx",
+        "libcxxabi",
+        "libunwind",
+        "compiler-rt",
+        "runtimes",
+        "cmake",
+        "llvm/cmake",
+        "llvm/CMakeLists.txt",
+        "llvm/include/llvm/Config"
+      ]
+    },
+    {
+      "name": "mingw",
+      "url": "https://codeload.github.com/mingw-w64/mingw-w64/tar.gz/ee9bd87644156c41072a11ad957d1e11831a72df",
+      "sha256": "6a346a2e3eafa0e5ec8e30df89b16a05add8b50cb4cece8c47593799ca19e43b"
+    },
+    {
+      "name": "toolchain",
+      "url": "https://codeload.github.com/mstorsjo/llvm-mingw/tar.gz/refs/tags/20261104",
+      "sha256": "1d3b9f851a5f83b5f52c43c168b0bd325f39728cd7b8fe1db33bb480a1bfc983"
+    }
+  ],
+  "toolchain_files": {
+    "bin/clang++.exe": "d05fee2c3f79b15d998d3c3413c76aabd416ec789edff89c8f698a8be44a3970",
+    "bin/clang-23.exe": "77aab5c58e0e9b240d9a81a2e31a1f6d026eefc55a54d68bc39d6d9532672c05",
+    "bin/ld.lld.exe": "6bfddbca74e3ce9b12fc8e631a0454620b283a53a4d75b1be34580cacec46204",
+    "bin/libclang-cpp.dll": "4dc97058739797618bcde7f1d9da18690c2ffb668390f5856c3166bc67b83f72",
+    "lib/clang/23/lib/linux/libclang_rt.builtins-x86_64.a": "6a701120c4b6f479524572887ff2fa15ae8b8d8cf12b0c09bf99211cf887ffdb",
+    "lib/clang/23/lib/windows/libclang_rt.builtins-x86_64.a": "dbfdaa146ab743d06a6262beea2cfbfefc224e0d515a295f43ac8296f31a1207",
+    "x86_64-w64-mingw32/lib/crt2u.o": "8323bf754e95d3709be632f874c14ed0b927129906202100bd229ee465c79c32",
+    "x86_64-w64-mingw32/lib/crtbegin.o": "9d5bc36fdaa414e361bb0b59b424f125794fce897cf4be928e1e78d47aee0855",
+    "x86_64-w64-mingw32/lib/crtend.o": "c0f54e6ee995f267d95eeed2ff3b874583e77fc0f2fd3746a890d0827dce479b",
+    "x86_64-w64-mingw32/lib/libc++.a": "19bdd608075d3d4eff7a97c5026783595ff4f0fe226ee852b5f7af7a1020a9ac",
+    "x86_64-w64-mingw32/lib/libc++abi.a": "919c33067c082bd7d3a9ba1ee83dfc2f920f98c7abfc6469c13382f8ea8b0a2a",
+    "x86_64-w64-mingw32/lib/libmingw32.a": "d498791858e43ea2fda69c94c4d408c462f3b1dbf006f868fccca96d975f2275",
+    "x86_64-w64-mingw32/lib/libmingwex.a": "4745d24c75dabd5c621053711ff0f7c5694c006a96ee39d17231ad5fadd626f2",
+    "x86_64-w64-mingw32/lib/libpthread.a": "ed46f121f02fd4c7351fdb79a3f025834bd06d5de18119a984ac6d1d4f25ccf0",
+    "x86_64-w64-mingw32/lib/libucrt.a": "062960e8846d48e81dcb58057c2bcc4f0c466a3ef8bd94879d8f8061b4f9c5e4",
+    "x86_64-w64-mingw32/lib/libucrtapp.a": "2533ae891eab973664f2b294acce5ab5120f95ee4771caa7b789d4b53bb8e3ec",
+    "x86_64-w64-mingw32/lib/libunwind.a": "9adc05d37e2ce22e36e33ea2b3d772e71d016a8f3a0356c0d165f902a5594a60",
+    "x86_64-w64-mingw32/lib/libwinpthread.a": "ed46f121f02fd4c7351fdb79a3f025834bd06d5de18119a984ac6d1d4f25ccf0"
+  },
+  "runtime_source_tree_sha256": "c190ebda0e675077cbd65f0f390886b81418a6ad7787391b04f0d63482dc632c"
+}

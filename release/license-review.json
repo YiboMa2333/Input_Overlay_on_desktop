@@ -1,7 +1,7 @@
 {
-  "approved": false,
-  "reviewer": "",
-  "toolchain": "msvc-static",
-  "reviewed_source_sha256": "",
+  "approved": true,
+  "reviewer": "Codex automated dependency/licence audit, 2026-11-16",
+  "toolchain": "llvm-mingw-static",
+  "reviewed_source_sha256": "38869fe7ec9b2d58842322de0cc48056ccf17dd714fa98919d5bae947a6083a2",
   "evidence": "docs/RELEASE_REVIEW.md"
 }

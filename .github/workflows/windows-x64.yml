@@ -25,14 +25,40 @@ jobs:
         run: ctest --test-dir build -C Release --output-on-failure
       - name: Private packaging validation (never uploaded)
         run: python tools/package.py stage --build build --output build/review --toolchain msvc-static
+  portable:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Fetch reviewed LLVM-MinGW toolchain
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'llvm-mingw.zip'
+          Invoke-WebRequest 'https://github.com/mstorsjo/llvm-mingw/releases/download/20261104/llvm-mingw-20261104-ucrt-x86_64.zip' -OutFile $archive
+          $expected = '552191b5754c49a5a20723276a6fc56541ea1922c4c50b7b669022333fc1b40f'
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Toolchain checksum mismatch' }
+          Expand-Archive -LiteralPath $archive -DestinationPath $env:RUNNER_TEMP
+          $toolchain = Join-Path $env:RUNNER_TEMP 'llvm-mingw-20261104-ucrt-x86_64'
+          "$toolchain/bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          "OVERLAY_TOOLCHAIN=$toolchain" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Configure reviewed portable Release
+        run: cmake -S . -B portable -G 'MinGW Makefiles' -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_MAKE_PROGRAM=mingw32-make -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DOVERLAY_ENABLE_DESKTOP_TESTS=OFF
+      - name: Build reviewed portable Release
+        run: cmake --build portable --parallel
+      - name: Test reviewed portable Release
+        run: ctest --test-dir portable --output-on-failure
+      - name: Fetch matching runtime sources
+        if: github.event_name == 'workflow_dispatch' && inputs.package && github.ref == 'refs/heads/main'
+        run: python tools/runtime_sources.py --cache portable/source-downloads --output portable/runtime-sources.zip
       - name: Reviewed distributable
         if: github.event_name == 'workflow_dispatch' && inputs.package && github.ref == 'refs/heads/main'
-        run: python tools/package.py release --build build --output build/distribution --toolchain msvc-static
+        run: python tools/package.py release --build portable --output portable/distribution --toolchain llvm-mingw-static --toolchain-root "$env:OVERLAY_TOOLCHAIN" --runtime-sources portable/runtime-sources.zip
       - name: Upload approved ZIP only
         if: github.event_name == 'workflow_dispatch' && inputs.package && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v7
         with:
           name: InputOverlayDesktop-windows-x64
-          path: build/distribution/InputOverlayDesktop-windows-x64.zip
+          path: portable/distribution/InputOverlayDesktop-windows-x64.zip
           if-no-files-found: error
           retention-days: 14

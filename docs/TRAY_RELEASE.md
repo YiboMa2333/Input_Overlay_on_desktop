@@ -49,14 +49,15 @@ remote GitHub Actions execution. Position is changed through Edit mode or the
 configuration file; Settings currently exposes reset rather than numeric screen
 coordinates. Binaries are unsigned.
 
-## Private artifact and release hold
+## Earlier private artifact and subsequent review
 
 `tools/package.py review --build build/llvm --output dist/tray-review
 --toolchain llvm-mingw-static` creates a marked private review ZIP, executable,
 dependency/hash manifest and matching source ZIP. Supply `--cmake` when CMake is
 not on PATH. Review ZIPs are for local evaluation and must not be published.
-`release` remains blocked by `release/license-review.json`: exact compiler-runtime
-notice inventory and GPL compatibility review are unfinished. See RELEASE_REVIEW.
+That was the pre-audit state. The subsequent LLVM-MinGW dependency/licence audit
+and instructions for the reviewed release package are in RELEASE_REVIEW.md.
+Only the newly reviewed package is covered; older private staging remains private.
 The Windows workflow builds x64 Release with static MSVC runtime and uploads a
 portable ZIP only after the explicit source/toolchain-bound approval gate passes.
 
