@@ -1,6 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "window.hpp"
+#include <wtsapi32.h>
 namespace overlay {
+void Window::suspend_capture() {
+    suspended_ = true;
+    capture_.detach(); attached_ = false; state_.clear();
+    InvalidateRect(handle_, nullptr, FALSE);
+}
+void Window::resume_capture() {
+    if (locked_ || disconnected_ || sleeping_) return;
+    state_.clear(); suspended_ = false;
+    attached_ = capture_.attach(handle_);
+    if (!attached_) {
+        MessageBoxW(handle_, L"Cannot resume input capture. The application will close.", L"Input Overlay", MB_ICONERROR);
+        DestroyWindow(handle_);
+    }
+}
 LRESULT CALLBACK Window::procedure(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
     auto self = reinterpret_cast<Window*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
     if (msg == WM_NCCREATE) {
@@ -12,11 +27,36 @@ LRESULT CALLBACK Window::procedure(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
 }
 LRESULT Window::message(UINT msg, WPARAM w, LPARAM l) {
     switch (msg) {
+    case WM_INPUT_DEVICE_CHANGE:
+        if (w == GIDC_REMOVAL) state_.remove_device(static_cast<InputState::Device>(l));
+        InvalidateRect(handle_, nullptr, FALSE); return 0;
+    case WM_WTSSESSION_CHANGE:
+        switch (w) {
+        case WTS_SESSION_LOCK: locked_ = true; break;
+        case WTS_SESSION_UNLOCK: locked_ = false; break;
+        case WTS_CONSOLE_DISCONNECT: case WTS_REMOTE_DISCONNECT: disconnected_ = true; break;
+        case WTS_CONSOLE_CONNECT: case WTS_REMOTE_CONNECT: disconnected_ = false; break;
+        default: return 0;
+        }
+        if (locked_ || disconnected_ || sleeping_) suspend_capture();
+        else resume_capture();
+        return 0;
+    case WM_POWERBROADCAST:
+        if (w == PBT_APMSUSPEND) { sleeping_ = true; suspend_capture(); }
+        if (w == PBT_APMRESUMEAUTOMATIC) { sleeping_ = false; resume_capture(); }
+        return TRUE;
+    case WM_ACTIVATEAPP:
+        // INPUTSINK keeps capture active across ordinary focus changes. Do not
+        // clear held chords here; the periodic release-only check repairs misses.
+        if (attached_) capture_.recover(state_);
+        return 0;
     case WM_INPUT:
         capture_.handle(reinterpret_cast<HRAWINPUT>(l), state_);
+        InvalidateRect(handle_, nullptr, FALSE);
         // DefWindowProc performs foreground RAWINPUT cleanup.
         return DefWindowProcW(handle_, msg, w, l);
     case WM_TIMER:
+        if (!suspended_ && attached_) capture_.recover(state_);
         state_.expire(); InvalidateRect(handle_, nullptr, FALSE); return 0;
     case WM_SIZE:
         renderer_.resize(LOWORD(l), HIWORD(l)); return 0;
@@ -31,6 +71,8 @@ LRESULT Window::message(UINT msg, WPARAM w, LPARAM l) {
     case WM_DESTROY: {
         KillTimer(handle_, 1);
         if (attached_) { capture_.detach(); attached_ = false; }
+        state_.clear();
+        if (session_notifications_) { WTSUnRegisterSessionNotification(handle_); session_notifications_ = false; }
         RECT rect{};
         if (!IsIconic(handle_) && GetWindowRect(handle_, &rect)) settings_.save_position(rect.left, rect.top);
         PostQuitMessage(0); return 0;
@@ -53,15 +95,17 @@ int Window::run(HINSTANCE instance, int show) {
         L"Input Overlay Desktop", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         settings_.x, settings_.y, settings_.width, settings_.height, nullptr, nullptr, instance, this);
     if (!handle_) return 1;
+    session_notifications_ = WTSRegisterSessionNotification(handle_, NOTIFY_FOR_THIS_SESSION) != FALSE;
     attached_ = capture_.attach(handle_);
-    if (!attached_ || !SetTimer(handle_, 1, 16, nullptr)) {
-        MessageBoxW(handle_, L"Cannot start input capture or refresh timer.", L"Input Overlay", MB_ICONERROR);
+    if (!session_notifications_ || !attached_ || !SetTimer(handle_, 1, 16, nullptr)) {
+        MessageBoxW(handle_, L"Cannot register input capture, session notifications or refresh timer.", L"Input Overlay", MB_ICONERROR);
         DestroyWindow(handle_); return 1;
     }
     ShowWindow(handle_, show);
     MSG msg{};
     int result;
     while ((result = GetMessageW(&msg, nullptr, 0, 0)) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }
+    if (IsWindow(handle_)) DestroyWindow(handle_);
     return result < 0 ? 1 : static_cast<int>(msg.wParam);
 }
 }

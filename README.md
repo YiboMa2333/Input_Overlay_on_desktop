@@ -4,7 +4,7 @@ A standalone Windows desktop adaptation of [univrsal/input-overlay](https://gith
 This scaffold uses C++20, CMake, Win32 Raw Input, Direct2D and DirectWrite. OBS Studio
 is neither needed nor linked. It is an early prototype, not a feature-complete port.
 
-The application shows currently held keyboard keys, five mouse buttons, cursor
+The application highlights physical W/A/S/D/Q/E, Shift, Ctrl and Space keys, five mouse buttons, cursor
 coordinates and a brief vertical scroll indicator. Raw Input continues to arrive
 while another normal desktop application has focus. Input is processed in memory;
 there is no input log, network listener or telemetry. Close the window to stop capture.
@@ -24,6 +24,22 @@ git switch develop/standalone-win32
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 .\build\Release\InputOverlayDesktop.exe
+```
+
+Run the deterministic input-state tests (no third-party test framework):
+
+```powershell
+cmake --build build --config Release --target input_state_tests
+ctest --test-dir build -C Release --output-on-failure
+```
+
+The state library and tests also build without Windows SDK dependencies on a
+machine with CMake and a C++20 compiler:
+
+```powershell
+cmake -S . -B build/state -DOVERLAY_BUILD_APP=OFF -DBUILD_TESTING=ON
+cmake --build build/state --config Release
+ctest --test-dir build/state -C Release --output-on-failure
 ```
 
 If working from the local checkout created during development, start directly
@@ -77,6 +93,10 @@ exclusive-input applications have not been validated.
 All state mutation and drawing happen on the window thread; capture does not call
 the renderer. A 16 ms timer requests repaint; no background polling thread is needed.
 Rendering recreates a lost Direct2D target. Capture unregisters on shutdown.
+The adapter tracks physical scan-code locations, separately tracks each device,
+and repairs missed releases. Shift and Ctrl combine left/right states visually.
+See [INPUT_CAPTURE.md](docs/INPUT_CAPTURE.md) for interruption handling, privacy,
+non-blocking registration and recovery limits.
 
 `input_state.cpp` adapts upstream's `deps/common/input_data.cpp` event-to-state
 dispatch logic. Its original copyright and GPL notice are retained. The remaining
@@ -101,9 +121,10 @@ The launch acceptance criterion remains unverified. Follow
 
 Remaining work includes transparent/click-through overlay mode with a recovery
 control, tray UI, per-monitor DPI support, configurable layouts, upstream preset
-conversion with asset clearance, automated state tests, device-aware handling for
-multiple keyboards/mice, session-change recovery and gamepad support. Very fast
-press/release pairs between paints may not be visible; long key lists can clip.
+conversion with asset clearance and gamepad support. Automated state tests are
+included but have not yet been executed in this environment. Very fast
+press/release pairs between paints may not be visible.
 Horizontal wheel input is not implemented. Devices already held when capture
 starts are not seeded into state. A device disconnect while held can leave stale
-state until a release or app restart. Settings write failures are currently silent.
+state if Windows fails to report both device removal and a usable asynchronous
+release state. Settings write failures are currently silent.

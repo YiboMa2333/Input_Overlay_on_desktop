@@ -47,7 +47,7 @@ https://github.com/univrsal/input-overlay/tree/7d97ae9e66d9e4dd968f759fcafd44796
 | Presets | `presets/xbox-controller/README.md` states CC0; `gamecube/CREDITS.md` credits borrowed m-overlay textures; `inphic/README.md` describes vendor images and permission correspondence | No asset imported. One preset's CC0 label does not clear the entire collection; audit each asset's origin/licence and redistribution rights before reuse |
 
 The standalone target links only Windows system/SDK libraries (`user32`, `gdi32`,
-`d2d1`, `dwrite`) and the compiler C++ runtime. Windows SDK and runtime use and
+`d2d1`, `dwrite`, `wtsapi32`) and the compiler C++ runtime. Windows SDK and runtime use and
 redistribution follow Microsoft's applicable terms; no Microsoft SDK binaries or
 font files are copied into this repository. Segoe UI is requested as an installed
 system font. There are no bundled third-party dependency binaries or assets.

@@ -32,27 +32,30 @@ HRESULT Renderer::draw(HWND window, const InputState& state) {
         target_->DrawText(value.c_str(), static_cast<UINT32>(value.size()), format_.Get(),
             D2D1::RectF(x, y, x + width, y + 40), brush_.Get());
     };
-    std::wstring keys = L"Keys: ";
-    for (unsigned key = 0; key < state.keys.size(); ++key) {
-        if (!state.keys[key]) continue;
-        wchar_t name[64]{};
-        UINT scan = MapVirtualKeyW(key, MAPVK_VK_TO_VSC_EX);
-        LONG bits = static_cast<LONG>((scan & 0xff) << 16);
-        if (scan & 0xff00) bits |= 1L << 24;
-        if (GetKeyNameTextW(bits, name, 64)) keys += std::wstring(name) + L"  ";
-        else keys += L"VK " + std::to_wstring(key) + L"  ";
-    }
     text(L"Input Overlay Desktop", 18, 12, 650);
-    text(keys, 18, 48, target_->GetSize().width - 36);
+    const bool held[]{state.keys[W], state.keys[A], state.keys[S], state.keys[D],
+        state.keys[Q], state.keys[E], state.keys[LeftShift] || state.keys[RightShift],
+        state.keys[LeftCtrl] || state.keys[RightCtrl], state.keys[Space]};
+    constexpr const wchar_t* key_labels[]{L"W", L"A", L"S", L"D", L"Q", L"E", L"Shift", L"Ctrl", L"Space"};
+    // Scale cells to fit the configured width, preserving distinct regions.
+    const float cell = (target_->GetSize().width - 36.0f) / 9.0f;
+    for (unsigned i = 0; i < 9; ++i) {
+        const float x = 18.0f + i * cell;
+        brush_->SetColor(held[i] ? D2D1::ColorF(0.1f, 0.65f, 0.4f) : D2D1::ColorF(0.18f, 0.22f, 0.3f));
+        target_->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x, 48, x + cell - 4, 90), 7, 7), brush_.Get());
+        text(key_labels[i], x + 4, 57, cell - 8);
+    }
     constexpr const wchar_t* labels[]{L"Left", L"Right", L"Middle", L"X1", L"X2"};
     for (unsigned i = 0; i < 5; ++i) {
-        float x = 18.0f + i * 112.0f;
+        const float mouse_cell = (target_->GetSize().width - 36.0f) / 5.0f;
+        float x = 18.0f + i * mouse_cell;
         brush_->SetColor(state.buttons[i] ? D2D1::ColorF(0.1f, 0.65f, 0.4f) : D2D1::ColorF(0.18f, 0.22f, 0.3f));
-        target_->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x, 98, x + 100, 143), 7, 7), brush_.Get());
-        text(labels[i], x + 10, 108, 90);
+        target_->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x, 98, x + mouse_cell - 4, 143), 7, 7), brush_.Get());
+        text(labels[i], x + 4, 108, mouse_cell - 8);
     }
     text(L"Mouse: " + std::to_wstring(state.mouse_x) + L", " + std::to_wstring(state.mouse_y)
-        + L"    Wheel: " + std::to_wstring(state.wheel), 18, 155, 650);
+        + L"    Wheel: " + (state.wheel > 0 ? std::wstring(L"Up ") : state.wheel < 0 ? std::wstring(L"Down ") : std::wstring())
+        + std::to_wstring(state.wheel), 18, 155, 650);
     auto hr = target_->EndDraw();
     if (hr == D2DERR_RECREATE_TARGET) { brush_.Reset(); target_.Reset(); return S_OK; }
     return hr;
