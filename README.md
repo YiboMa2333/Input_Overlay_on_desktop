@@ -58,8 +58,6 @@ OBS SDK, submodules or network downloads are required by CMake.
 ```powershell
 git clone https://github.com/YiboMa2333/Input_Overlay_on_desktop.git
 cd Input_Overlay_on_desktop
-# Use the standalone application development branch:
-git switch develop/standalone-win32
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 .\build\Release\InputOverlayDesktop.exe

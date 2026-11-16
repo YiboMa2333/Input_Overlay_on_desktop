@@ -2,6 +2,6 @@
   "approved": true,
   "reviewer": "Codex automated dependency/licence audit, 2026-11-16",
   "toolchain": "llvm-mingw-static",
-  "reviewed_source_sha256": "38869fe7ec9b2d58842322de0cc48056ccf17dd714fa98919d5bae947a6083a2",
+  "reviewed_source_sha256": "50e7cd4c3304372af40a451a1ab2b8ed1ce3b8bba9e3ee76aec2cdce0aaee761",
   "evidence": "docs/RELEASE_REVIEW.md"
 }
