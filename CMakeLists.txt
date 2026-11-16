@@ -1,0 +1,18 @@
+cmake_minimum_required(VERSION 3.25)
+project(InputOverlayDesktop VERSION 0.1.0 LANGUAGES CXX)
+if(NOT WIN32)
+  message(FATAL_ERROR "Input Overlay Desktop requires Windows and the Windows SDK")
+endif()
+add_executable(InputOverlayDesktop WIN32
+  src/main.cpp src/input/input_state.cpp src/input/raw_input.cpp
+  src/render/renderer.cpp src/settings/settings.cpp src/desktop/window.cpp)
+target_compile_features(InputOverlayDesktop PRIVATE cxx_std_20)
+target_compile_definitions(InputOverlayDesktop PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_include_directories(InputOverlayDesktop PRIVATE src)
+target_link_libraries(InputOverlayDesktop PRIVATE user32 gdi32 d2d1 dwrite)
+if(MSVC)
+  target_compile_options(InputOverlayDesktop PRIVATE /W4 /permissive- /utf-8)
+endif()
+install(TARGETS InputOverlayDesktop RUNTIME DESTINATION .)
+install(FILES LICENSE README.md DESTINATION .)
+install(DIRECTORY LICENSES docs DESTINATION .)
