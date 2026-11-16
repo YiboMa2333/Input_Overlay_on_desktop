@@ -1,0 +1,38 @@
+name: Windows x64 build and reviewed packaging
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Create a ZIP only after licence/runtime review is approved
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Configure x64 static-runtime Release
+        run: cmake -S . -B build -A x64 -DBUILD_TESTING=ON -DOVERLAY_ENABLE_DESKTOP_TESTS=OFF
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Noninteractive tests
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Private packaging validation (never uploaded)
+        run: python tools/package.py stage --build build --output build/review --toolchain msvc-static
+      - name: Reviewed distributable
+        if: github.event_name == 'workflow_dispatch' && inputs.package && github.ref == 'refs/heads/main'
+        run: python tools/package.py release --build build --output build/distribution --toolchain msvc-static
+      - name: Upload approved ZIP only
+        if: github.event_name == 'workflow_dispatch' && inputs.package && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: InputOverlayDesktop-windows-x64
+          path: build/distribution/InputOverlayDesktop-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,7 @@
+{
+  "approved": false,
+  "reviewer": "",
+  "toolchain": "msvc-static",
+  "reviewed_source_sha256": "",
+  "evidence": "docs/RELEASE_REVIEW.md"
+}
