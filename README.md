@@ -4,14 +4,15 @@ A standalone Windows desktop adaptation of [univrsal/input-overlay](https://gith
 This scaffold uses C++20, CMake, Win32 Raw Input, Direct2D and DirectWrite. OBS Studio
 is neither needed nor linked. It is an early prototype, not a feature-complete port.
 
-The application highlights physical W/A/S/D/Q/E, Shift, Ctrl and Space keys, five mouse buttons, cursor
-coordinates and a brief vertical scroll indicator. Raw Input continues to arrive
+The compact vector HUD highlights physical Q/W/E, Shift/A/S/D, Ctrl and Space
+keys, left/right/middle mouse regions and brief directional scroll indicators.
+X1/X2 and cursor position remain in the input model but are not drawn. Raw Input continues to arrive
 while another normal desktop application has focus. Input is processed in memory;
 there is no input log, network listener or telemetry. Close the window to stop capture.
 
 ## Build on Windows
 
-Prerequisites: Windows 10/11, Visual Studio 2022 with **Desktop development with C++**
+Prerequisites: Windows 10 version 1703 or newer / Windows 11, Visual Studio 2022 with **Desktop development with C++**
 (MSVC v143 and a Windows 10/11 SDK), and CMake 3.25 or newer on PATH. Use an
 x64 Native Tools Command Prompt or Developer PowerShell. No third-party packages,
 OBS SDK, submodules or network downloads are required by CMake.
@@ -56,9 +57,17 @@ as described in [the licensing notes](docs/LICENSING.md).
 
 ## Settings and usage
 
-The normal title bar allows dragging, minimizing and closing the window. It is
-always on top by default; it does not activate on each input event. This initial
-window has an opaque background, not a transparent or click-through surface.
+Drag a visible key or the mouse body to move the borderless HUD. Right-click a
+visible element and select **Close overlay** to exit. The window is always on
+top by default and does not activate on ordinary clicks or input events. It has
+no title bar or large background panel. Empty areas between elements are fully
+transparent and pass clicks to windows beneath; the visible shapes remain
+interactive for moving and closing the HUD.
+
+Keys use thin off-white outlines, dark translucent fills and a warm yellow
+`#D8CF45` pressed state. The mouse uses matching vector outlines. Dark edging
+keeps white strokes visible on light desktops. All highlights read live state.
+See [HUD rendering notes and previews](docs/HUD_DESIGN.md).
 
 Window position is saved on close in
 `%LOCALAPPDATA%\InputOverlayDesktop\settings.ini`. To change the defaults, create
@@ -68,13 +77,17 @@ or edit the file while the app is closed:
 [window]
 x=60
 y=60
-width=760
-height=260
+width=338
+height=148
 topmost=1
 ```
 
-Width is clamped to 400–2000 and height to 180–1000; the window is fixed-size
-within a run. An entirely off-screen saved position falls back to (60,60).
+Width is clamped to 254–1352 and height to 111–592 logical pixels at 96 DPI.
+The HUD preserves its aspect ratio inside that canvas, leaving any extra space
+transparent. For 150% custom HUD size, use width=507 and height=222. Windows DPI
+scaling is applied in addition; moving between monitors follows `WM_DPICHANGED`.
+Existing INI sizes are respected: reset width/height to the example for the new
+compact appearance. An entirely off-screen saved position falls back to (60,60).
 If settings cannot be saved, defaults still work. No administrator rights are
 required for ordinary desktop capture. Secure desktop, other sessions and
 exclusive-input applications have not been validated.
@@ -85,7 +98,7 @@ exclusive-input applications have not been validated.
 | --- | --- |
 | `src/input/raw_input.*` | Register keyboard/mouse Raw Input and normalize Windows events |
 | `src/input/input_state.*` | Bounded held-state arrays, mouse position and wheel expiry |
-| `src/render/renderer.*` | Direct2D target lifecycle, DirectWrite labels and visual state |
+| `src/render/renderer.*`, `hud_layout.hpp` | Vector HUD geometry, DirectWrite labels, alpha surface and visual state |
 | `src/settings/settings.*` | Validated INI settings and position persistence |
 | `src/desktop/window.*` | HWND lifecycle, message loop, topmost policy and refresh timer |
 | `src/main.cpp` | DPI setup and application entry point |
@@ -119,8 +132,8 @@ development environment: CMake and a usable MSVC/Windows SDK were not found.
 The launch acceptance criterion remains unverified. Follow
 [VALIDATION.md](docs/VALIDATION.md) on a Windows development machine.
 
-Remaining work includes transparent/click-through overlay mode with a recovery
-control, tray UI, per-monitor DPI support, configurable layouts, upstream preset
+Remaining work includes a full click-through mode with a recovery
+control, tray UI, configurable layouts, upstream preset
 conversion with asset clearance and gamepad support. Automated state tests are
 included but have not yet been executed in this environment. Very fast
 press/release pairs between paints may not be visible.

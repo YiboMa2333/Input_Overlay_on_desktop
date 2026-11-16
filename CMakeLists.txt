@@ -18,7 +18,8 @@ if(OVERLAY_BUILD_APP)
     src/main.cpp src/input/raw_input.cpp
     src/render/renderer.cpp src/settings/settings.cpp src/desktop/window.cpp)
   target_compile_features(InputOverlayDesktop PRIVATE cxx_std_20)
-  target_compile_definitions(InputOverlayDesktop PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+  target_compile_definitions(InputOverlayDesktop PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN
+    WINVER=0x0A00 _WIN32_WINNT=0x0A00)
   target_include_directories(InputOverlayDesktop PRIVATE src)
   target_link_libraries(InputOverlayDesktop PRIVATE overlay_state user32 gdi32 d2d1 dwrite wtsapi32)
   if(MSVC)

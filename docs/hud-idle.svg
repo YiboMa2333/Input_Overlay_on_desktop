@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="676" height="296" viewBox="0 0 338 148">
+<title>HUD design preview, not an application screenshot</title>
+<g stroke-linejoin="round" font-family="Segoe UI, sans-serif" font-size="13" font-weight="600" text-anchor="middle">
+<rect x="70" y="8" width="40" height="40" rx="3.5" fill="#101317" fill-opacity=".74" stroke="#080A0D" stroke-opacity=".85" stroke-width="3.6"/>
+<rect x="70" y="8" width="40" height="40" rx="3.5" fill="none" stroke="#F2F0E7" stroke-width="1.2"/>
+<text x="90.0" y="28.0" dominant-baseline="central" fill="#F2F0E7">Q</text>
+<rect x="116" y="8" width="40" height="40" rx="3.5" fill="#101317" fill-opacity=".74" stroke="#080A0D" stroke-opacity=".85" stroke-width="3.6"/>
+<rect x="116" y="8" width="40" height="40" rx="3.5" fill="none" stroke="#F2F0E7" stroke-width="1.2"/>
+<text x="136.0" y="28.0" dominant-baseline="central" fill="#F2F0E7">W</text>
+<rect x="162" y="8" width="40" height="40" rx="3.5" fill="#101317" fill-opacity=".74" stroke="#080A0D" stroke-opacity=".85" stroke-width="3.6"/>
+<rect x="162" y="8" width="40" height="40" rx="3.5" fill="none" stroke="#F2F0E7" stroke-width="1.2"/>
+<text x="182.0" y="28.0" dominant-baseline="central" fill="#F2F0E7">E</text>
+<rect x="8" y="54" width="56" height="40" rx="3.5" fill="#101317" fill-opacity=".74" stroke="#080A0D" stroke-opacity=".85" stroke-width="3.6"/>
+<rect x="8" y="54" width="56" height="40" rx="3.5" fill="none" stroke="#F2F0E7" stroke-width="1.2"/>
+<text x="36.0" y="74.0" dominant-baseline="central" fill="#F2F0E7">Shift</text>
+<rect x="70" y="54" width="40" height="40" rx="3.5" fill="#101317" fill-opacity=".74" stroke="#080A0D" stroke-opacity=".85" stroke-width="3.6"/>
+<rect x="70" y="54" width="40" height="40" rx="3.5" fill="none" stroke="#F2F0E7" stroke-width="1.2"/>
+<text x="90.0" y="74.0" dominant-baseline="central" fill="#F2F0E7">A</text>
+<rect x="116" y="54" width="40" height="40" rx="3.5" fill="#101317" fill-opacity=".74" stroke="#080A0D" stroke-opacity=".85" stroke-width="3.6"/>
+<rect x="116" y="54" width="40" height="40" rx="3.5" fill="none" stroke="#F2F0E7" stroke-width="1.2"/>
+<text x="136.0" y="74.0" dominant-baseline="central" fill="#F2F0E7">S</text>
+<rect x="162" y="54" width="40" height="40" rx="3.5" fill="#101317" fill-opacity=".74" stroke="#080A0D" stroke-opacity=".85" stroke-width="3.6"/>
+<rect x="162" y="54" width="40" height="40" rx="3.5" fill="none" stroke="#F2F0E7" stroke-width="1.2"/>
+<text x="182.0" y="74.0" dominant-baseline="central" fill="#F2F0E7">D</text>
+<rect x="8" y="100" width="56" height="40" rx="3.5" fill="#101317" fill-opacity=".74" stroke="#080A0D" stroke-opacity=".85" stroke-width="3.6"/>
+<rect x="8" y="100" width="56" height="40" rx="3.5" fill="none" stroke="#F2F0E7" stroke-width="1.2"/>
+<text x="36.0" y="120.0" dominant-baseline="central" fill="#F2F0E7">Ctrl</text>
+<rect x="70" y="100" width="132" height="40" rx="3.5" fill="#101317" fill-opacity=".74" stroke="#080A0D" stroke-opacity=".85" stroke-width="3.6"/>
+<rect x="70" y="100" width="132" height="40" rx="3.5" fill="none" stroke="#F2F0E7" stroke-width="1.2"/>
+<text x="136.0" y="120.0" dominant-baseline="central" fill="#F2F0E7">Space</text>
+<path d="M278 8 C305 8 322 27 322 58 L322 96 C322 124 304 140 278 140 C252 140 234 124 234 96 L234 58 C234 27 251 8 278 8 Z" fill="#101317" fill-opacity=".74"/>
+<path d="M278 8 C305 8 322 27 322 58 L322 96 C322 124 304 140 278 140 C252 140 234 124 234 96 L234 58 C234 27 251 8 278 8 Z" fill="none" stroke="#080A0D" stroke-width="3.6"/>
+<path d="M234 66 H322 M278 9 V24 M278 57 V66" fill="none" stroke="#080A0D" stroke-width="3.6"/>
+<path d="M278 8 C305 8 322 27 322 58 L322 96 C322 124 304 140 278 140 C252 140 234 124 234 96 L234 58 C234 27 251 8 278 8 Z" fill="none" stroke="#F2F0E7" stroke-width="1.2"/>
+<path d="M234 66 H322 M278 9 V24 M278 57 V66" fill="none" stroke="#F2F0E7" stroke-width="1.2"/>
+<rect x="271" y="25" width="14" height="31" rx="6" fill="#101317" stroke="#080A0D" stroke-width="3.6"/>
+<rect x="271" y="25" width="14" height="31" rx="6" fill="none" stroke="#F2F0E7" stroke-width="1.2"/>
+<path d="M275 34 H281 M275 40 H281 M275 46 H281" stroke="#F2F0E7" fill="none"/>
+</g></svg>

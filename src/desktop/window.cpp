@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "window.hpp"
 #include <wtsapi32.h>
+#include <windowsx.h>
+#include "render/hud_layout.hpp"
 namespace overlay {
 void Window::suspend_capture() {
     suspended_ = true;
@@ -27,6 +29,37 @@ LRESULT CALLBACK Window::procedure(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
 }
 LRESULT Window::message(UINT msg, WPARAM w, LPARAM l) {
     switch (msg) {
+    case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
+    case WM_NCHITTEST: {
+        POINT point{GET_X_LPARAM(l), GET_Y_LPARAM(l)};
+        ScreenToClient(handle_, &point);
+        RECT rect{}; GetClientRect(handle_, &rect);
+        const auto fit = hud::fit(static_cast<float>(rect.right), static_cast<float>(rect.bottom));
+        if (fit.scale <= 0) return HTTRANSPARENT;
+        return hud::hit((point.x - fit.x) / fit.scale, (point.y - fit.y) / fit.scale)
+            ? HTCAPTION : HTTRANSPARENT;
+    }
+    case WM_NCRBUTTONUP:
+    case WM_CONTEXTMENU: {
+        POINT point{}; GetCursorPos(&point);
+        HMENU menu = CreatePopupMenu();
+        if (!menu) return 0;
+        AppendMenuW(menu, MF_STRING, 1, L"Close overlay");
+        SetForegroundWindow(handle_);
+        const auto selected = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON,
+            point.x, point.y, 0, handle_, nullptr);
+        DestroyMenu(menu);
+        if (selected == 1) DestroyWindow(handle_);
+        else PostMessageW(handle_, WM_NULL, 0, 0);
+        return 0;
+    }
+    case WM_DPICHANGED: {
+        const auto suggested = reinterpret_cast<const RECT*>(l);
+        SetWindowPos(handle_, nullptr, suggested->left, suggested->top,
+            suggested->right - suggested->left, suggested->bottom - suggested->top,
+            SWP_NOZORDER | SWP_NOACTIVATE);
+        InvalidateRect(handle_, nullptr, FALSE); return 0;
+    }
     case WM_INPUT_DEVICE_CHANGE:
         if (w == GIDC_REMOVAL) state_.remove_device(static_cast<InputState::Device>(l));
         InvalidateRect(handle_, nullptr, FALSE); return 0;
@@ -91,17 +124,26 @@ int Window::run(HINSTANCE instance, int show) {
     if (!RegisterClassW(&klass)) return 1;
     RECT position{settings_.x, settings_.y, settings_.x + settings_.width, settings_.y + settings_.height};
     if (!MonitorFromRect(&position, MONITOR_DEFAULTTONULL)) { settings_.x = 60; settings_.y = 60; }
-    handle_ = CreateWindowExW(settings_.topmost ? WS_EX_TOPMOST : 0, klass.lpszClassName,
-        L"Input Overlay Desktop", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+    handle_ = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
+        | (settings_.topmost ? WS_EX_TOPMOST : 0), klass.lpszClassName,
+        L"Input Overlay Desktop", WS_POPUP,
         settings_.x, settings_.y, settings_.width, settings_.height, nullptr, nullptr, instance, this);
     if (!handle_) return 1;
+    const auto dpi = GetDpiForWindow(handle_);
+    SetWindowPos(handle_, nullptr, settings_.x, settings_.y,
+        MulDiv(settings_.width, dpi, 96), MulDiv(settings_.height, dpi, 96), SWP_NOZORDER | SWP_NOACTIVATE);
     session_notifications_ = WTSRegisterSessionNotification(handle_, NOTIFY_FOR_THIS_SESSION) != FALSE;
     attached_ = capture_.attach(handle_);
     if (!session_notifications_ || !attached_ || !SetTimer(handle_, 1, 16, nullptr)) {
         MessageBoxW(handle_, L"Cannot register input capture, session notifications or refresh timer.", L"Input Overlay", MB_ICONERROR);
         DestroyWindow(handle_); return 1;
     }
-    ShowWindow(handle_, show);
+    // A layered window needs its first alpha surface before it becomes visible.
+    if (FAILED(renderer_.draw(handle_, state_))) {
+        MessageBoxW(handle_, L"Cannot create the transparent overlay surface.", L"Input Overlay", MB_ICONERROR);
+        DestroyWindow(handle_); return 1;
+    }
+    ShowWindow(handle_, show == SW_HIDE ? SW_HIDE : SW_SHOWNOACTIVATE);
     MSG msg{};
     int result;
     while ((result = GetMessageW(&msg, nullptr, 0, 0)) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }

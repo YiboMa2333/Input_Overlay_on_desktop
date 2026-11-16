@@ -18,8 +18,8 @@ Settings Settings::load() {
         return static_cast<int>(GetPrivateProfileIntW(L"window", name, fallback, result.file.c_str()));
     };
     result.x = read(L"x", result.x); result.y = read(L"y", result.y);
-    result.width = std::clamp(read(L"width", result.width), 400, 2000);
-    result.height = std::clamp(read(L"height", result.height), 180, 1000);
+    result.width = std::clamp(read(L"width", result.width), 254, 1352);
+    result.height = std::clamp(read(L"height", result.height), 111, 592);
     result.topmost = read(L"topmost", 1) != 0;
     return result;
 }

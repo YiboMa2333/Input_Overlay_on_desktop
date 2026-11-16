@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "input/input_state.hpp"
+#include "render/hud_layout.hpp"
 #include <cstdlib>
 #include <iostream>
 using namespace overlay;
@@ -18,8 +19,11 @@ int main() {
     check(!state.keys[W] && !state.buttons[0], "starts released");
     key(W, true); key(D, true);
     check(state.keys[W] && state.keys[D], "W+D chord");
+    check(hud::keys[1].pressed(state) && hud::keys[6].pressed(state), "W+D visual regions share live state");
+    check(!hud::keys[0].pressed(state), "unpressed Q visual region stays dark");
     key(W, false);
     check(!state.keys[W] && state.keys[D], "W release preserves D");
+    check(!hud::keys[1].pressed(state) && hud::keys[6].pressed(state), "W visual release preserves D highlight");
     key(D, true); key(D, true); key(D, false);
     check(!state.keys[D], "autorepeat is idempotent");
     for (auto code : tracked_keys) key(code, true);
@@ -83,5 +87,17 @@ int main() {
     check(state.buttons[0], "one mouse release preserves another mouse hold");
     state.remove_device(2);
     check(!state.buttons[0], "last mouse removal clears hold");
+    const auto normal = hud::fit(338, 148);
+    const auto double_dpi = hud::fit(676, 296);
+    check(normal.scale == 1 && normal.x == 0 && normal.y == 0, "native HUD fit");
+    check(double_dpi.scale == 2 && double_dpi.x == 0 && double_dpi.y == 0, "200 percent DPI fit");
+    const auto letterbox = hud::fit(400, 148);
+    check(letterbox.scale == 1 && letterbox.x == 31, "aspect fit does not stretch keys");
+    check(!hud::hit(112, 20) && !hud::hit(215, 70), "inter-key and keyboard-mouse gaps pass through");
+    for (const auto& shape : hud::keys) {
+        check(shape.x > 0 && shape.y > 0 && shape.x + shape.width < hud::width
+            && shape.y + shape.height < hud::height, "key stays inside padded canvas");
+        check(hud::hit(shape.x + shape.width / 2, shape.y + shape.height / 2), "key center can be dragged");
+    }
     std::cout << "Input-state transitions passed\n";
 }

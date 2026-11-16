@@ -31,14 +31,17 @@ commit and output before claiming the launch criterion is satisfied.
    Repeat under another keyboard layout; labels represent physical US positions.
    Type untracked letters into Notepad: input remains normal and no overlay
    state for them is retained.
-3. Press/release all five mouse buttons. Check matching highlighting, cursor
-   coordinates and signed vertical wheel ticks. Wheel display should clear
+3. Press/release left, right and middle mouse buttons. Check matching mouse
+   diagram regions and directional wheel chevrons. X1/X2 and coordinates remain
+   state-only and are not drawn in this compact HUD. Wheel display should clear
    approximately 180 ms after the last scroll event. A single physical mouse
    button must light only its own region; hold W+D simultaneously with left
    mouse, then release controls individually. Test both wheel directions and
    normal foreground clicking, dragging, scrolling, shortcuts and typing.
-4. Drag the window; verify topmost behavior, minimize/restore and close. Confirm
-   closing exits the process and stops capture. Relaunch and verify position.
+4. Drag a key or the mouse body; verify topmost behavior. Right-click an element,
+   select Close overlay and confirm the process exits and stops capture. Relaunch
+   and verify position. Verify clicking or dragging the HUD does not ordinarily
+   steal focus from the foreground game/app (opening the menu explicitly may).
 5. Edit INI dimensions and topmost while closed. Check bounds and off-screen
    position fallback. Test a non-writable settings directory.
 6. Check display-scale changes and target recreation where practical; document
@@ -66,3 +69,30 @@ Build/run commands are in README. Tests have been added but have not been run
 here because no C++ toolchain/CMake is available. These tests do not validate
 Windows registrations, scan-code delivery, session messages or graphics; the
 manual checks above are still required.
+
+## Visual integration checks (not yet run)
+
+1. Place the HUD over solid white, solid black, a checkerboard and a colorful
+   desktop. Padding, gaps and the area above Shift must be fully transparent;
+   there must be no opaque rectangular panel. Labels/outlines must remain readable.
+2. Verify Q/W/E, Shift/A/S/D, Ctrl/Space arrangement and the mouse at the right.
+   Compare against the user's reference once the missing attachment is available.
+3. Hold W+D+left mouse, then release W. Only W returns to its dark fill. Independently
+   check right and middle mouse, and both modifier sides. Yellow must be #D8CF45.
+   Left/right click fill must not light the middle wheel; both wheel directions
+   must show a temporary directional chevron.
+4. Click in the gaps and unused padding: the underlying app must receive the
+   click. Drag a visible element and close from its context menu. Verify movement
+   and close do not leave Raw Input registrations or the timer running.
+5. Check 100%, 125%, 150% and 200% Windows scaling, including moving between
+   monitors with different scale and negative screen coordinates. Shapes must
+   retain their proportions and labels must stay inside caps, without blurry
+   bitmap scaling. Also test non-proportional INI dimensions: excess area stays
+   transparent and the HUD is uniformly centered.
+6. Repeat suspend/resume and display changes; inspect for black backgrounds,
+   stale surfaces and increasing GDI handle count during repeated DPI changes.
+
+`python tools/preview_hud.py` was run successfully; it generated and XML-parsed
+both vector documentation previews. This is not a native rendering test. Layout
+fit, hit regions and shared live-state mapping checks were added to the C++ test
+executable, but remain unrun with the other C++ tests.
