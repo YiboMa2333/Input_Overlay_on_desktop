@@ -11,9 +11,11 @@
 #include <cstdlib>
 #include <array>
 #include <utility>
+#include <vector>
 #include "desktop/commands.hpp"
 namespace {
 int clicks{}, hotkeys{};
+COLORREF backdrop_color=RGB(55,65,80);
 HWND fixture{};
 HWND overlay_window{};
 PROCESS_INFORMATION child{};
@@ -46,6 +48,10 @@ void check(bool value,const char* message) {
     std::cout<<"PASS: "<<message<<'\n';
 }
 LRESULT CALLBACK procedure(HWND hwnd,UINT msg,WPARAM w,LPARAM l) {
+    if(msg==WM_ERASEBKGND) {
+        RECT r{};GetClientRect(hwnd,&r);auto brush=CreateSolidBrush(backdrop_color);
+        FillRect(reinterpret_cast<HDC>(w),&r,brush);DeleteObject(brush);return 1;
+    }
     if(msg==WM_LBUTTONDOWN) { ++clicks;return 0; }
     if(msg==WM_HOTKEY) { ++hotkeys;return 0; }
     return DefWindowProcW(hwnd,msg,w,l);
@@ -181,6 +187,16 @@ int wmain(int argc,wchar_t** argv) {
     HDC desktop=GetDC(nullptr);const auto pixel=GetPixel(desktop,inside.x,inside.y);ReleaseDC(nullptr,desktop);
     check(pixel!=CLR_INVALID && pixel!=RGB(55,65,80),"locked painted key remains visibly above test backdrop");
     screenshot(hwnd,profile/L"locked-mode.bmp");
+    // Verify alpha composition against known backgrounds, not just window styles.
+    for(auto color : {RGB(255,255,255),RGB(0,0,0),RGB(55,65,80)}) {
+        backdrop_color=color;RedrawWindow(fixture,nullptr,nullptr,RDW_INVALIDATE|RDW_ERASE|RDW_UPDATENOW);
+        order();
+        POINT gap_point{r.left+MulDiv(215,r.right-r.left,338),r.top+MulDiv(75,r.bottom-r.top,148)};
+        auto dc=GetDC(nullptr);const auto gap_color=GetPixel(dc,gap_point.x,gap_point.y);
+        const auto key_color=GetPixel(dc,inside.x,inside.y);ReleaseDC(nullptr,dc);
+        check(gap_color==color,"locked keyboard-mouse gap is fully transparent over backdrop");
+        check(key_color!=color && key_color!=CLR_INVALID,"key stays visibly distinct on light and dark backdrops");
+    }
     if(WindowFromPoint(inside)!=fixture) {
         wchar_t target[128]{};GetClassNameW(WindowFromPoint(inside),target,128);
         std::wcerr<<L"Probe "<<inside.x<<L","<<inside.y<<L" rect "<<r.left<<L","<<r.top<<L","<<r.right<<L","<<r.bottom
@@ -201,6 +217,62 @@ int wmain(int argc,wchar_t** argv) {
     check(MonitorFromRect(&r,MONITOR_DEFAULTTONULL)!=nullptr,"monitor-change notification recovers offscreen HUD");
     action(hwnd,overlay::command::reset);r=rect(hwnd);
     check(r.left>=area.left && r.top>=area.top && r.right<=area.right && r.bottom<=area.bottom,"tray reset recovers accessible geometry");
+    // Exercise real surface destruction/recreation repeatedly and check GDI ownership.
+    const auto original=r;const auto gdi_before=GetGuiResources(child.hProcess,GR_GDIOBJECTS);
+    for(int i=0;i<80;++i) {
+        const auto width=original.right-original.left+(i%2)*90;
+        const auto height=original.bottom-original.top+(i%2)*40;
+        SetWindowPos(hwnd,nullptr,original.left,original.top,width,height,SWP_NOZORDER|SWP_NOACTIVATE);
+        RedrawWindow(hwnd,nullptr,nullptr,RDW_INVALIDATE|RDW_UPDATENOW);
+    }
+    pump(100);const auto gdi_after=GetGuiResources(child.hProcess,GR_GDIOBJECTS);
+    check(gdi_before>0 && gdi_after<=gdi_before+4,"80 surface resizes do not accumulate GDI handles");
+    action(hwnd,overlay::command::reset);
+    // Recreate the same lost-icon state that Explorer restart produces, without
+    // terminating the user's Explorer or touching other applications' icons.
+    NOTIFYICONDATAW removed{};removed.cbSize=sizeof(removed);removed.hWnd=hwnd;removed.uID=1;
+    check(Shell_NotifyIconW(NIM_DELETE,&removed)!=FALSE,"remove only test overlay tray icon");
+    SendMessageW(hwnd,RegisterWindowMessageW(L"TaskbarCreated"),0,0);pump(100);
+    icon.hWnd=hwnd;
+    check(SUCCEEDED(Shell_NotifyIconGetRect(&icon,&icon_rect)),"tray icon is re-added after Shell recovery notification");
+    // Exercise the real Shell callback and popup, not just WM_COMMAND handlers.
+    const POINT tray_point{(icon_rect.left+icon_rect.right)/2,(icon_rect.top+icon_rect.bottom)/2};
+    RECT virtual_screen{GetSystemMetrics(SM_XVIRTUALSCREEN),GetSystemMetrics(SM_YVIRTUALSCREEN),
+        GetSystemMetrics(SM_XVIRTUALSCREEN)+GetSystemMetrics(SM_CXVIRTUALSCREEN),
+        GetSystemMetrics(SM_YVIRTUALSCREEN)+GetSystemMetrics(SM_CYVIRTUALSCREEN)};
+    if(PtInRect(&virtual_screen,tray_point) && WindowFromPoint(tray_point)) {
+        auto choose=[&](int index) {
+            pointer(tray_point,MOUSEEVENTF_RIGHTDOWN);pointer(tray_point,MOUSEEVENTF_RIGHTUP);pump(150);
+            GUITHREADINFO gui{};gui.cbSize=sizeof(gui);GetGUIThreadInfo(GetWindowThreadProcessId(hwnd,nullptr),&gui);
+            if(gui.hwndMenuOwner!=hwnd) { key(VK_ESCAPE);key(VK_ESCAPE,true);pump(50);return false; }
+            key(VK_HOME);key(VK_HOME,true);
+            for(int i=0;i<index;++i) { key(VK_DOWN);key(VK_DOWN,true); }
+            key(VK_RETURN);key(VK_RETURN,true);pump(100);return true;
+        };
+        if(choose(1)) {
+            check((GetWindowLongPtrW(hwnd,GWL_EXSTYLE)&WS_EX_TRANSPARENT)!=0,"real tray popup Lock command activates click-through");
+            check(choose(0),"reopen real tray popup");
+            check(!(GetWindowLongPtrW(hwnd,GWL_EXSTYLE)&WS_EX_TRANSPARENT),"real tray popup Edit command activates selection");
+        } else std::cout<<"NOT EXERCISED: tray icon is in a hidden/overflow area; popup requires manual opening\n";
+    } else std::cout<<"NOT EXERCISED: tray icon has no visible desktop rectangle\n";
+    std::vector<HMONITOR> monitors;
+    EnumDisplayMonitors(nullptr,nullptr,[](HMONITOR m,HDC,LPRECT,LPARAM data)->BOOL {
+        reinterpret_cast<std::vector<HMONITOR>*>(data)->push_back(m);return TRUE;
+    },reinterpret_cast<LPARAM>(&monitors));
+    const auto start_dpi=GetDpiForWindow(hwnd);const auto start_rect=rect(hwnd);
+    const auto logical_w=MulDiv(start_rect.right-start_rect.left,96,start_dpi);
+    const auto logical_h=MulDiv(start_rect.bottom-start_rect.top,96,start_dpi);
+    for(auto monitor_handle : monitors) {
+        MONITORINFO info{};info.cbSize=sizeof(info);GetMonitorInfoW(monitor_handle,&info);
+        SetWindowPos(hwnd,nullptr,info.rcWork.left+32,info.rcWork.top+32,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
+        pump(150);const auto actual=rect(hwnd);const auto actual_dpi=GetDpiForWindow(hwnd);
+        check(MonitorFromWindow(hwnd,MONITOR_DEFAULTTONEAREST)==monitor_handle,"move onto available monitor");
+        check(std::abs(MulDiv(actual.right-actual.left,96,actual_dpi)-logical_w)<=2
+            && std::abs(MulDiv(actual.bottom-actual.top,96,actual_dpi)-logical_h)<=2,"monitor move preserves logical HUD size");
+        std::cout<<"Monitor DPI: "<<actual_dpi<<'\n';
+    }
+    if(monitors.size()<2) std::cout<<"NOT EXERCISED: physical multi-monitor and mixed-DPI transitions (one connected monitor)\n";
+    action(hwnd,overlay::command::reset);
     WritePrivateProfileStringW(L"window",L"hotkey_enabled",L"1",config.c_str());
     action(hwnd,overlay::command::reload);
     action(hwnd,overlay::command::lock);toggle_hotkey();

@@ -45,8 +45,39 @@ instead of asynchronous cursor queries, avoiding geometry drift from later input
 The final run passed, including checking that a painted locked key remained
 visibly rendered while that same point delivered a real click underneath.
 Interactive tests still require an idle desktop: concurrent user/automation input
-can invalidate them. No further desktop tests were run after the user requested
-that this limitation be documented.
+can invalidate them. Testing paused when the user requested that this limitation
+be documented, then resumed for the follow-up below when the user was available.
+
+## Follow-up verification, 2026-11-16
+
+Windows reported one connected monitor, 2240 by 1400 pixels, effective DPI 144
+(150% scaling), with a 2240 by 1328 work area. The user confirmed a second monitor
+is unavailable on this PC and agreed to leave physical removal and mixed-DPI
+cross-monitor checks untested.
+
+The expanded build succeeded and the final CTest run passed all four targets
+(0 failures, 6.20 seconds). The generated result is retained locally as
+`build/verification-followup.xml`. Additional checks in the desktop suite passed:
+
+- Pixel probes over white, black and dark backdrops confirmed that the gap
+  between keyboard and mouse exactly matched the backdrop, while a painted key
+  remained visually distinct. This tests alpha composition; it does not replace
+  a full readability review on every background or DPI.
+- Eighty alternating native surface resizes completed, with the child's GDI
+  object count staying within four objects of its initial count. This checks
+  GDI ownership, not every category of memory or graphics-driver allocation.
+- The test removed only its own overlay's tray icon, sent `TaskbarCreated`, and
+  verified that the icon was re-added. Explorer itself was not restarted.
+- Moving the overlay on the available monitor preserved its logical size at
+  DPI 144. Cross-monitor/mixed-DPI coverage was explicitly reported unexercised.
+- Real tray-popup activation was attempted, but Windows kept this icon in a
+  hidden/overflow area; the popup selection subcheck was explicitly unexercised.
+  Tray registration, recovery, shortcut fallback and command handlers passed.
+
+The earlier movement, corner/edge resizing, Shift locking, click-through/focus,
+restart persistence, offscreen recovery and hotkey-conflict checks also passed
+again without the previous pointer-interference failures. Test children exited
+cleanly. No production application code changed in this follow-up.
 
 ## Reproduce
 
@@ -83,7 +114,9 @@ provided but have not been run in this environment.
 
 ## Remaining manual/hardware checks
 
-- Physically disconnect/reconnect a monitor containing the HUD; change resolution
+- Physical multi-monitor removal and mixed-DPI transitions are explicitly deferred
+  at the user's request because this PC has one available monitor. With suitable
+  hardware, disconnect/reconnect a monitor containing the HUD; change resolution
   and work-area/taskbar layout and confirm accessible placement. The automated
   recovery notification and monitor topology model do not replace cable testing.
 - Move between monitors at 100%, 125%, 150% and 200% DPI, including negative
@@ -94,9 +127,10 @@ provided but have not been run in this environment.
 - Verify keyboard/mouse visualization against physical hardware in ordinary apps,
   long chords, device unplugging, session lock/unlock and suspend/resume. Unit
   state tests and UI gesture injection do not establish every raw-device behavior.
-- Compare over white, black and patterned backgrounds, and capture pressed states.
-  Check mixed-DPI text sharpness, repeated resize resource usage, and recovery
-  after a graphics device reset.
+- White/black/dark backdrop alpha probes and repeated-resize GDI counts passed in
+  the follow-up. Patterned-background readability, physical pressed-state capture,
+  mixed-DPI text sharpness, other memory allocations and recovery after a graphics
+  device reset remain separate checks.
 - Exclusive full-screen games, elevated/isolated applications, secure desktop,
   remote sessions and simultaneous external topmost windows need separate testing.
 - No public binary package has been produced. Audit the exact compiler runtime

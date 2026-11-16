@@ -92,7 +92,11 @@ have not been exercised; those are still manual hardware checks. Shell menu
 commands are dispatched through their real WM_COMMAND handlers by the test;
 opening/selecting every tray menu item by pointer remains a manual check.
 The native suite requires an idle shared desktop; interference was observed on
-some reruns. The final idle run passed. See `VALIDATION.md` for the full record.
+some earlier reruns. The follow-up idle run passed, including light/dark alpha
+probes, eighty native surface resizes and tray-icon re-add after a simulated Shell
+recovery notification. Actual tray popup selection was unavailable because the
+icon was in the Shell overflow area. The user deferred physical multi-monitor
+checks on this single-monitor PC. See `VALIDATION.md` for the full record.
 
 Win32 references: [layered-window hit testing](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features#layered-windows),
 [RegisterHotKey behavior](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerhotkey).
